@@ -18,18 +18,18 @@ content="#2563eb">
 body{
 font-family:sans-serif;
 margin:0;
+padding-top: 180px;
 background:#f5f5f5;
 }
 
 .topbar{
-position:sticky;
-top:0;
-z-index:999;
-background:white;
-padding:10px;
-box-shadow:0 2px 8px rgba(0,0,0,.1);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 180px; /* ←固定 */
+  z-index: 999;
 }
-
 select{
   width:100%;
   height:110px;
@@ -71,7 +71,6 @@ box-shadow:0 2px 8px rgba(0,0,0,.1);
 }
 
 .size{
-  font-size:46px;
   font-weight:bold;
   color:#7c3aed;
   margin-top:10px;
@@ -360,6 +359,15 @@ select,
   font-size:18px !important;
 }
 
+}
+/* iPhone文字勝手拡大防止 */
+html{
+  -webkit-text-size-adjust:100%;
+}
+
+/* ←ここに追加 */
+html {
+  scroll-padding-top: 180px;
 }
 </style>
 <script src="https://unpkg.com/html5-qrcode"></script>
@@ -707,19 +715,18 @@ async function chg(row,mode){
 
   stockEl.innerText = current;
 
- box.value = "";
+  box.value="";
 
-await fetch(
+ await fetch(
   GAS_URL,
   {
-    method: "POST",
-    body: JSON.stringify({
-      row: row,
-      diff: diff
+    method:"POST",
+    body:JSON.stringify({
+      row:row,
+      diff:diff
     })
   }
 );
-
 box.blur();
 
 setTimeout(() => {
@@ -727,31 +734,20 @@ setTimeout(() => {
   const card = document.getElementById(`item_${row}`);
   if(!card) return;
 
-  const headerHeight = 110;
-
-  const top =
-    card.getBoundingClientRect().top +
-    window.pageYOffset -
-    headerHeight;
-
-  window.scrollTo({
-    top,
-    behavior: "auto"
+  card.scrollIntoView({
+    behavior: "auto",
+    block: "start"
   });
 
 }, 300);
+
 }
 
 // =====================
 // 上へ
 // =====================
 function goTop(){
-
-  window.scrollTo({
-    top:0,
-    behavior:"smooth"
-  });
-
+ window.scrollTo({ top:0, behavior:"smooth" });
 }
 
 // =====================
@@ -808,10 +804,7 @@ scanner = null;
 reader.style.display =
 "none";
 
-window.scrollTo(
-0,
-LAST_SCROLL
-);
+window.scrollTo(0, LAST_SCROLL);
 
 return;
 
@@ -822,10 +815,7 @@ LAST_SCROLL =
 window.scrollY;
 
 // 一瞬で上へ
-window.scrollTo(
-0,
-0
-);
+window.scrollTo(0, 0);
 
 // 表示
 reader.style.display =
@@ -890,10 +880,7 @@ scanner = null;
 reader.style.display =
 "none";
 
-window.scrollTo(
-0,
-LAST_SCROLL
-);
+window.scrollTo(0, LAST_SCROLL);
 
 render();
 
