@@ -552,17 +552,15 @@ normalize(QR_SEARCH);
 
 const target =
 normalize(
-
-(item.code || "") +
-
-(item.name || "") +
-
-(item.supplier || "") +
-
-(item.type || "") +
-
-(item.size || "")
-
+[
+item.code,
+item.name,
+item.supplier,
+item.type,
+item.size
+]
+.filter(Boolean)
+.join(" ")
 );
 
 console.log(
@@ -763,14 +761,16 @@ alert(
 
 QR_SEARCH =
 String(decoded)
-.trim()
-.replace(/\s+/g,"");
+.trim();
 
-console.log(
-"検索:",
-QR_SEARCH
-);
+/* 検索解除 */
+document.getElementById(
+"jump"
+).value="";
 
+document.getElementById(
+"keyword"
+).value="";
 
 scanner.stop()
 .then(()=>{
