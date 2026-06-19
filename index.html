@@ -181,16 +181,11 @@ border-radius:12px;
 display:none;
 
 width:100%;
-
-height:300px;
+height:320px;
 
 background:#000;
 
 margin:10px auto;
-
-border-radius:12px;
-
-overflow:hidden;
 }
 
 #reader video{
@@ -726,24 +721,13 @@ await scanner.clear();
 }
 
 scanner =
-new Html5Qrcode("reader");
+new Html5Qrcode(
+"reader"
+);
 
-/* デバッグ */
-Html5Qrcode
-.getCameras()
-.then(c=>{
+console.log("scan start");
 
-console.log(c);
-
-/* カメラ0台なら終了 */
-if(!c.length){
-
-alert("カメラ見つからない");
-
-}
-
-});
-
+reader.innerHTML = "";
 await scanner.start(
 
 {
@@ -751,106 +735,44 @@ facingMode:"environment"
 },
 
 {
-fps:30,
+
+fps:10,
 
 qrbox:{
-width:300,
-height:300
-},
-
-aspectRatio:1,
-
-experimentalFeatures:{
-useBarCodeDetectorIfSupported:true
+width:250,
+height:250
 }
 
 },
 
 (decoded)=>{
 
+alert(
+"読取成功\n" +
+decoded
+);
+
+console.log(
+decoded
+);
+
 QR_SEARCH =
 String(decoded)
 .trim();
 
-alert(
-"読取: " +
-QR_SEARCH
-);
-
 scanner.stop()
 .then(()=>{
 
-reader.style.display="none";
+reader.style.display=
+"none";
 
-render();
-
-});
-
-},
-
-()=>{}
-
-);
-
-}catch(e){
-
-console.log(e);
-
-reader.style.display="none";
-
-/* 背面失敗→前面へ切替 */
-try{
-
-scanner =
-new Html5Qrcode("reader");
-
-await scanner.start(
-
-{
-facingMode:"user"
-},
-
-{
-fps:20,
-
-qrbox:(w,h)=>{
-
-const size =
-Math.min(w,h)*0.8;
-
-return{
-width:size,
-height:size
-};
-
-},
-
-aspectRatio:1,
-
-disableFlip:false
-
-},
-
-(decoded)=>{
-
-alert("読取成功");
-
-console.log(decoded);
-
-QR_SEARCH=
-decoded.trim();
-
-scanner.stop()
-.then(()=>{
-
-reader.style.display="none";
-
-/* 商品選択解除 */
-document.getElementById(
+document
+.getElementById(
 "jump"
 ).value="";
 
-document.getElementById(
+document
+.getElementById(
 "keyword"
 ).value="";
 
@@ -860,19 +782,27 @@ render();
 
 },
 
-()=>{}
+(error)=>{
+
+console.log(
+"scan",
+error
+);
+
+}
 
 );
 
-}catch(err){
+}catch(e){
 
-alert("カメラ利用できません");
+console.log(e);
 
-reader.style.display="none";
+reader.style.display=
+"none";
 
-console.log(err);
-
-}
+alert(
+"カメラ起動失敗"
+);
 
 }
 
@@ -880,6 +810,7 @@ console.log(err);
 
 // 起動
 load();
+
 
 </script>
 
