@@ -178,25 +178,31 @@ border-radius:12px;
   margin-bottom:10px;
 }
 #reader{
+
 display:none;
 
-position:fixed;
+width:100%;
 
-top:0;
-left:0;
+height:320px;
 
-width:100vw;
-height:100vh;
+margin:10px auto;
 
 background:#000;
 
-z-index:99999;
+overflow:hidden;
+
+border-radius:12px;
+
 }
 
 #reader video{
+
 width:100% !important;
+
 height:100% !important;
+
 object-fit:cover;
+
 }
 /* =========================
 スマホだけ縮小（PCそのまま）
@@ -694,32 +700,30 @@ let scanner;
 
 async function scanQR(){
 
-
 const reader =
 document.getElementById("reader");
 
 reader.style.display="block";
 
-window.scrollTo({
-top:0
-});
+scanner =
+new Html5Qrcode("reader");
 
-scanner = new Html5Qrcode(
-"reader"
-);
-
+try{
 
 await scanner.start(
 
 {
-facingMode:"environment"
+facingMode:{
+ideal:"environment"
+}
 },
 
 {
 fps:10,
-
-qrbox:250
-
+qrbox:{
+width:250,
+height:250
+}
 },
 
 (decoded)=>{
@@ -728,9 +732,7 @@ QR_SEARCH=decoded;
 
 scanner.stop();
 
-document.getElementById(
-"reader"
-).style.display="none";
+reader.style.display="none";
 
 render();
 
@@ -740,44 +742,15 @@ render();
 
 );
 
-}
-// 起動
-load();
+}catch(e){
 
-</script>
+alert("カメラ起動失敗");
 
-<canvas id="qrCanvas" style="display:none;"></canvas>
-<script>
-
-if(
-
-'serviceWorker'
-
-in navigator
-
-){
-
-navigator.serviceWorker.register(
-
-'service-worker.js'
-
-)
-
-.then(()=>{
-
-console.log(
-
-"SW登録成功"
-
-);
-
-})
-
-.catch(e=>{
+reader.style.display="none";
 
 console.log(e);
 
-});
+}
 
 }
 
