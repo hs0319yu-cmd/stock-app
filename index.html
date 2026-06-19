@@ -425,8 +425,13 @@ onblur="zoomOff()">
 
 <script>
 
-let LAST_FOCUS_ROW = null;
 let DATA = [];
+
+let LAST_Y = 0;
+
+function onFocusQty(row){
+  LAST_Y = window.scrollY;
+}
 
  const GAS_URL =
 "https://script.google.com/macros/s/AKfycbwYBYPrPt6_-F6KJ0fBAl5mfRWzzvEi976jYX4-16Bw3NSbhtOVkgnTy__vqVPrdE8g/exec";
@@ -690,8 +695,8 @@ placeholder="数量"
 id="q${item.row}"
 class="qty"
 onfocus="onFocusQty(${item.row})"
-onblur="onBlurQty(${item.row})"
-onchange="onBlurQty(${item.row})">
+onblur="onBlurQty(${item.row})">
+
 
    <div class="btns">
   <button class="plus" onclick="chg(${item.row},1)">＋</button>
@@ -741,9 +746,24 @@ async function chg(row,mode){
     })
   }
 );
-
 }
 
+function onFocusQty(row){
+  LAST_Y = window.scrollY;
+}
+
+function onBlurQty(row){
+
+  setTimeout(() => {
+
+    window.scrollTo({
+      top: LAST_Y,
+      behavior: "auto"
+    });
+
+  }, 150);
+
+}
 // =====================
 // 上へ
 // =====================
