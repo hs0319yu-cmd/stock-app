@@ -728,6 +728,22 @@ await scanner.clear();
 scanner =
 new Html5Qrcode("reader");
 
+/* デバッグ */
+Html5Qrcode
+.getCameras()
+.then(c=>{
+
+console.log(c);
+
+/* カメラ0台なら終了 */
+if(!c.length){
+
+alert("カメラ見つからない");
+
+}
+
+});
+
 await scanner.start(
 
 {
@@ -735,8 +751,19 @@ facingMode:"environment"
 },
 
 {
-fps:10,
-qrbox:220
+fps:30,
+
+qrbox:{
+width:300,
+height:300
+},
+
+aspectRatio:1,
+
+experimentalFeatures:{
+useBarCodeDetectorIfSupported:true
+}
+
 },
 
 (decoded)=>{
@@ -805,6 +832,8 @@ disableFlip:false
 },
 
 (decoded)=>{
+
+alert("読取成功");
 
 console.log(decoded);
 
