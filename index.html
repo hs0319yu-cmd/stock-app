@@ -725,9 +725,6 @@ new Html5Qrcode(
 "reader"
 );
 
-console.log("scan start");
-
-reader.innerHTML = "";
 await scanner.start(
 
 {
@@ -738,27 +735,18 @@ facingMode:"environment"
 
 fps:10,
 
-qrbox:{
-width:250,
-height:250
-}
+qrbox:220
 
 },
 
 (decoded)=>{
 
 alert(
-"読取成功\n" +
-decoded
-);
-
-console.log(
-decoded
+"読取成功"
 );
 
 QR_SEARCH =
-String(decoded)
-.trim();
+decoded.trim();
 
 scanner.stop()
 .then(()=>{
@@ -766,32 +754,16 @@ scanner.stop()
 reader.style.display=
 "none";
 
-document
-.getElementById(
-"jump"
-).value="";
-
-document
-.getElementById(
-"keyword"
-).value="";
-
 render();
 
 });
 
 },
 
-(error)=>{
-
-console.log(
-"scan",
-error
-);
-
-}
+()=>{}
 
 );
+
 
 }catch(e){
 
