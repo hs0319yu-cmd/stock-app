@@ -707,47 +707,39 @@ async function chg(row,mode){
 
   stockEl.innerText = current;
 
-  box.value="";
+ box.value = "";
 
- await fetch(
+await fetch(
   GAS_URL,
   {
-    method:"POST",
-    body:JSON.stringify({
-      row:row,
-      diff:diff
+    method: "POST",
+    body: JSON.stringify({
+      row: row,
+      diff: diff
     })
   }
 );
-// 入力欄からフォーカス外す
+
 box.blur();
 
-// 少し待って元位置へ戻す
-setTimeout(()=>{
+setTimeout(() => {
 
-const card =
-document.getElementById(
-`item_${row}`
-);
+  const card = document.getElementById(`item_${row}`);
+  if(!card) return;
 
-if(card){
+  const headerHeight = 110;
 
-const top =
-card.getBoundingClientRect().top
-+
-window.pageYOffset
--
-90; // ヘッダー高さ
+  const top =
+    card.getBoundingClientRect().top +
+    window.pageYOffset -
+    headerHeight;
 
-window.scrollTo({
-top,
-behavior:"instant"
-});
+  window.scrollTo({
+    top,
+    behavior: "auto"
+  });
 
-}
-
-},50);
-
+}, 300);
 }
 
 // =====================
