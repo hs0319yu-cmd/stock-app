@@ -361,6 +361,22 @@ select,
 }
 
 }
+.topbar{
+  position: fixed; /* ← stickyやめる */
+  top:0;
+  left:0;
+  right:0;
+  z-index:999;
+  background:white;
+}
+
+body{
+  padding-top: 220px; /* ←これが本体 */
+}
+
+html{
+  scroll-padding-top: 220px;
+}
 </style>
 <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
@@ -727,21 +743,7 @@ async function chg(row,mode){
 );
 
 }
-function onBlurQty(row){
 
-  setTimeout(() => {
-
-    const el = document.getElementById("item_" + row);
-    if(!el) return;
-
-    el.scrollIntoView({
-      behavior: "auto",
-      block: "center"
-    });
-
-  }, 250);
-
-}
 // =====================
 // 上へ
 // =====================
