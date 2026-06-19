@@ -702,11 +702,13 @@ try{
 
 if(scanner){
 
-await scanner.stop()
-.catch(()=>{});
+try{
+await scanner.stop();
+}catch(e){}
 
-await scanner.clear()
-.catch(()=>{});
+try{
+await scanner.clear();
+}catch(e){}
 
 }
 
@@ -716,9 +718,7 @@ new Html5Qrcode("reader");
 await scanner.start(
 
 {
-facingMode:{
-ideal:"environment"
-}
+facingMode:"environment"
 },
 
 {
@@ -728,7 +728,7 @@ qrbox:220
 
 (decoded)=>{
 
-QR_SEARCH = decoded;
+QR_SEARCH=decoded;
 
 scanner.stop()
 .then(()=>{
@@ -737,8 +737,7 @@ reader.style.display="none";
 
 render();
 
-})
-.catch(()=>{});
+});
 
 },
 
@@ -752,7 +751,51 @@ console.log(e);
 
 reader.style.display="none";
 
-alert("カメラ起動失敗");
+/* 背面失敗→前面へ切替 */
+try{
+
+scanner =
+new Html5Qrcode("reader");
+
+await scanner.start(
+
+{
+facingMode:"user"
+},
+
+{
+fps:10,
+qrbox:220
+},
+
+(decoded)=>{
+
+QR_SEARCH=decoded;
+
+scanner.stop()
+.then(()=>{
+
+reader.style.display="none";
+
+render();
+
+});
+
+},
+
+()=>{}
+
+);
+
+}catch(err){
+
+alert("カメラ利用できません");
+
+reader.style.display="none";
+
+console.log(err);
+
+}
 
 }
 
