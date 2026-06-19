@@ -767,9 +767,19 @@ let scanner = null;
 async function scanQR(){
 
 const reader =
-document.getElementById("reader");
+document.getElementById(
+"reader"
+);
 
-reader.style.display="block";
+// 一瞬で一番上へ
+window.scrollTo(
+0,
+0
+);
+
+// すぐ表示
+reader.style.display =
+"block";
 
 try{
 
