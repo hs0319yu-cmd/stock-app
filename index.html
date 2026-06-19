@@ -540,7 +540,8 @@ function render(){
     if (product && item.name !== product) return;
 
     
-// QR表示中なら supplier+name 検索
+// QR表示中なら
+// supplier|name|type 一致
 if(QR_SEARCH){
 
 const qr =
@@ -549,11 +550,24 @@ normalize(QR_SEARCH);
 const target =
 normalize(
 (item.supplier || "") +
-(item.name || "")
+"|" +
+(item.name || "") +
+"|" +
+(item.type || "")
+);
+
+console.log(
+"QR=",
+qr
+);
+
+console.log(
+"TARGET=",
+target
 );
 
 if(
-!target.includes(qr)
+target !== qr
 ){
 return;
 }
@@ -750,8 +764,7 @@ height:size
 QR_SEARCH =
 String(decoded)
 .trim()
-.replace(/\s/g,"")
-.replace(/\|/g,"");
+.replace(/\s/g,"");
 
 console.log(
 "QR:",
