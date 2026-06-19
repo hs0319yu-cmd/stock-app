@@ -362,20 +362,12 @@ select,
 
 }
 .topbar{
-  position: fixed; /* ← stickyやめる */
+  position: fixed;
   top:0;
   left:0;
   right:0;
   z-index:999;
   background:white;
-}
-
-body{
-  padding-top: 220px; /* ←これが本体 */
-}
-
-html{
-  scroll-padding-top: 220px;
 }
 </style>
 <script src="https://unpkg.com/html5-qrcode"></script>
@@ -429,8 +421,18 @@ let DATA = [];
 
 let LAST_Y = 0;
 
+// ←ここに置く
+function restoreScroll(){
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.scrollTo(0, LAST_Y);
+    });
+  });
+}
+
 function onFocusQty(row){
   LAST_Y = window.scrollY;
+  ACTIVE_ROW = row;
 }
 
  const GAS_URL =
@@ -689,13 +691,11 @@ return;
     </div>
 
    <input
-type="tel"
-inputmode="numeric"
-placeholder="数量"
-id="q${item.row}"
-class="qty"
-onfocus="onFocusQty(${item.row})"
-onblur="onBlurQty(${item.row})">
+  type="tel"
+  id="q${item.row}"
+  class="qty"
+  onfocus="onFocusQty(${item.row})"
+  onblur="restoreScroll()">
 
 
    <div class="btns">
@@ -727,43 +727,21 @@ async function chg(row,mode){
   let current = Number(stockEl.innerText) || 0;
 
   current += diff;
-
-  if(current < 0){
-    current = 0;
-  }
+  if(current < 0) current = 0;
 
   stockEl.innerText = current;
 
-  box.value="";
+  box.value = "";
 
- await fetch(
-  GAS_URL,
-  {
+  await fetch(GAS_URL,{
     method:"POST",
-    body:JSON.stringify({
-      row:row,
-      diff:diff
-    })
-  }
-);
+    body:JSON.stringify({ row, diff })
+  });
+
+  box.blur();
 }
 
-function onFocusQty(row){
-  LAST_Y = window.scrollY;
-}
 
-function onBlurQty(row){
-
-  setTimeout(() => {
-
-    window.scrollTo({
-      top: LAST_Y,
-      behavior: "auto"
-    });
-
-  }, 150);
-
-}
 // =====================
 // 上へ
 // =====================
