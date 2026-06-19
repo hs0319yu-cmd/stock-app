@@ -17,10 +17,20 @@ content="#2563eb">
 
 body{
 font-family:sans-serif;
-margin:0;
 background:#f5f5f5;
 }
+:root{
+  --header-h: 200px;
+}
 
+body{
+  margin:0;
+  padding-top: var(--header-h);
+}
+
+html{
+  scroll-padding-top: var(--header-h);
+}
 .topbar{
 position:sticky;
 top:0;
@@ -423,16 +433,11 @@ let LAST_Y = 0;
 
 // ←ここに置く
 function restoreScroll(){
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      window.scrollTo(0, LAST_Y);
-    });
-  });
+  window.scrollTo(0, LAST_Y);
 }
 
 function onFocusQty(row){
   LAST_Y = window.scrollY;
-  ACTIVE_ROW = row;
 }
 
  const GAS_URL =
@@ -695,7 +700,7 @@ return;
   id="q${item.row}"
   class="qty"
   onfocus="onFocusQty(${item.row})"
-  onblur="restoreScroll()">
+ onblur="setTimeout(restoreScroll, 0)">
 
 
    <div class="btns">
