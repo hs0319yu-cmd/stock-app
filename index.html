@@ -565,6 +565,41 @@ load();
 </script>
 
 <canvas id="qrCanvas" style="display:none;"></canvas>
+<script>
+
+if(
+
+'serviceWorker'
+
+in navigator
+
+){
+
+navigator.serviceWorker.register(
+
+'service-worker.js'
+
+)
+
+.then(()=>{
+
+console.log(
+
+"SW登録成功"
+
+);
+
+})
+
+.catch(e=>{
+
+console.log(e);
+
+});
+
+}
+
+</script>
 
 </body>
 </html>
