@@ -724,28 +724,21 @@ qrbox:250
 
 (decoded)=>{
 
-
 QR_SEARCH=decoded;
 
-
-
-await scanner.stop();
+scanner.stop();
 
 document.getElementById(
 "reader"
 ).style.display="none";
 
-
 render();
-
-
 
 },
 
 ()=>{}
 
 );
-
 
 }
 // 起動
