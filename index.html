@@ -543,7 +543,8 @@ function render(){
     if (supplier && item.supplier !== supplier) return;
     if (product && item.name !== product) return;
 
-     // QR表示中なら該当商品だけ表示
+    
+// QR表示中なら該当商品だけ表示
 if(QR_SEARCH){
 
 const qr =
@@ -551,9 +552,23 @@ normalize(QR_SEARCH);
 
 const target =
 normalize(
-item.code ||
-item.name ||
-""
+
+(item.code || "") +
+
+(item.name || "") +
+
+(item.supplier || "") +
+
+(item.type || "") +
+
+(item.size || "")
+
+);
+
+console.log(
+"QR",
+qr,
+target
 );
 
 if(
@@ -563,6 +578,7 @@ return;
 }
 
 }
+
 
    const text = normalize(
   item.supplier +
@@ -746,7 +762,15 @@ alert(
 );
 
 QR_SEARCH =
-decoded.trim();
+String(decoded)
+.trim()
+.replace(/\s+/g,"");
+
+console.log(
+"検索:",
+QR_SEARCH
+);
+
 
 scanner.stop()
 .then(()=>{
