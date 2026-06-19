@@ -1,13 +1,9 @@
 const CACHE_NAME = "stock-v1";
 
 const urlsToCache = [
-
-  "/",
-
-  "/index.html",
-
-  "/manifest.json"
-
+  "./",
+  "./index.html",
+  "./manifest.json"
 ];
 
 
