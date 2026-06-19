@@ -178,31 +178,25 @@ border-radius:12px;
   margin-bottom:10px;
 }
 #reader{
-
 display:none;
 
 width:100%;
 
-height:320px;
-
-margin:10px auto;
+height:300px;
 
 background:#000;
 
-overflow:hidden;
+margin:10px auto;
 
 border-radius:12px;
 
+overflow:hidden;
 }
 
 #reader video{
-
-width:100% !important;
-
-height:100% !important;
-
+width:100%;
+height:100%;
 object-fit:cover;
-
 }
 /* =========================
 スマホだけ縮小（PCそのまま）
@@ -695,8 +689,7 @@ function zoomOff(){
 // QR読取
 // =====================
 
-let scanner;
-
+let scanner = null;
 
 async function scanQR(){
 
@@ -705,10 +698,20 @@ document.getElementById("reader");
 
 reader.style.display="block";
 
+try{
+
+if(scanner){
+
+await scanner.stop()
+.catch(()=>{});
+
+await scanner.clear()
+.catch(()=>{});
+
+}
+
 scanner =
 new Html5Qrcode("reader");
-
-try{
 
 await scanner.start(
 
@@ -720,21 +723,22 @@ ideal:"environment"
 
 {
 fps:10,
-qrbox:{
-width:250,
-height:250
-}
+qrbox:220
 },
 
 (decoded)=>{
 
-QR_SEARCH=decoded;
+QR_SEARCH = decoded;
 
-scanner.stop();
+scanner.stop()
+.then(()=>{
 
 reader.style.display="none";
 
 render();
+
+})
+.catch(()=>{});
 
 },
 
@@ -744,15 +748,18 @@ render();
 
 }catch(e){
 
-alert("カメラ起動失敗");
+console.log(e);
 
 reader.style.display="none";
 
-console.log(e);
+alert("カメラ起動失敗");
 
 }
 
 }
+
+// 起動
+load();
 
 </script>
 
