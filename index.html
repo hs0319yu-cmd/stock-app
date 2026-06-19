@@ -469,29 +469,49 @@ function score(itemText, keyword){
 // =====================
 function updateProducts(){
 
-  const supplier =
-    document.getElementById("supplier").value;
+const supplier =
+document.getElementById(
+"supplier"
+).value;
 
-  const names = [
-    ...new Set(
-      DATA
-        .filter(item => {
+// 商品一覧生成
+const names =
+[
+...new Set(
 
-          if(!supplier) return true;
+DATA
+.filter(item=>
 
-          return item.supplier === supplier;
+!supplier ||
 
-        })
-        .map(item => item.name)
-    )
-  ];
+item.supplier === supplier
 
-  document.getElementById("jump").innerHTML =
-    '<option value="">商品</option>' +
+)
+.map(item=>
 
-    names.map(name =>
-      `<option value="${name}">${name}</option>`
-    ).join("");
+item.name
+
+)
+.filter(Boolean)
+
+)
+];
+
+document.getElementById(
+"jump"
+).innerHTML =
+
+'<option value="">商品</option>' +
+
+names
+.map(v=>
+
+`<option value="${v}">
+${v}
+</option>`
+
+)
+.join("");
 
 }
 
@@ -509,48 +529,54 @@ GAS_URL + "?api=1"
 DATA =
 await res.json();
 
-/* 仕入先一覧作成 */
-const suppliers =
+/* 仕入先一覧 */
+const supplierEl =
+document.getElementById(
+"supplier"
+);
+
+supplierEl.innerHTML =
+
+'<option value="">全商品検索</option>' +
+
 [
 ...new Set(
 DATA
 .map(v=>v.supplier)
 .filter(Boolean)
 )
-];
-
-document.getElementById(
-"supplier"
-).innerHTML =
-
-'<option value="">全商品検索</option>' +
-
-suppliers
+]
 .map(v=>
+
 `<option value="${v}">
 ${v}
 </option>`
+
 )
 .join("");
 
-/* 商品一覧 */
+/* 商品一覧更新 */
 updateProducts();
 
-/* 表示 */
+/* 初回表示 */
 render();
 
 }
 
-document.getElementById("keyword")
-.addEventListener("input", function () {
+document
+.getElementById("keyword")
+.addEventListener(
+"input",
+function(){
 
-  // 商品選択を解除
-  document.getElementById("jump").value = "";
+document
+.getElementById("jump")
+.value = "";
 
-  render();
+render();
 
-});
-
+}
+);
 // =====================
 // 描画
 // =====================
