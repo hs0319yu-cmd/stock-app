@@ -764,18 +764,46 @@ facingMode:"user"
 },
 
 {
-fps:10,
-qrbox:220
+fps:20,
+
+qrbox:(w,h)=>{
+
+const size =
+Math.min(w,h)*0.8;
+
+return{
+width:size,
+height:size
+};
+
+},
+
+aspectRatio:1,
+
+disableFlip:false
+
 },
 
 (decoded)=>{
 
-QR_SEARCH=decoded;
+console.log(decoded);
+
+QR_SEARCH=
+decoded.trim();
 
 scanner.stop()
 .then(()=>{
 
 reader.style.display="none";
+
+/* 商品選択解除 */
+document.getElementById(
+"jump"
+).value="";
+
+document.getElementById(
+"keyword"
+).value="";
 
 render();
 
