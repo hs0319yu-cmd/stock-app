@@ -1,0 +1,563 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta name="viewport"
+content="width=device-width,initial-scale=1,maximum-scale=1">
+
+<style>
+
+body{
+font-family:sans-serif;
+margin:0;
+background:#f5f5f5;
+}
+
+.topbar{
+position:sticky;
+top:0;
+z-index:999;
+background:white;
+padding:10px;
+box-shadow:0 2px 8px rgba(0,0,0,.1);
+}
+
+select{
+  width:100%;
+  height:110px;
+  font-size:42px;
+  font-weight:900;
+  padding:10px 20px;
+  margin-bottom:10px;
+  border-radius:14px;
+  border:3px solid #2563eb;
+  background:#2563eb;
+  color:white;
+}
+
+select option{
+font-size:24px;
+}
+
+input{
+width:100%;
+box-sizing:border-box;
+font-size:22px;
+padding:10px;
+margin-bottom:10px;
+}
+
+.card{
+background:white;
+margin:10px;
+padding:15px;
+border-radius:12px;
+box-shadow:0 2px 8px rgba(0,0,0,.1);
+}
+
+.name{
+  font-size:56px;
+  font-weight:900;
+  line-height:1.3;
+}
+
+.size{
+  font-size:46px;
+  font-weight:bold;
+  color:#7c3aed;
+  margin-top:10px;
+  line-height:1.4;
+}
+
+.stock{
+font-size:64px;
+font-weight:bold;
+text-align:center;
+margin:15px 0;
+}
+
+.qty{
+  width:100%;
+  height:100px;
+  font-size:64px;
+  font-weight:bold;
+  text-align:center;
+  margin-bottom:12px;
+
+  background:#ffffff;      /* 中身を真っ白 */
+  color:#000;              /* 文字を濃い黒 */
+
+  border:2px solid #000000; /* 枠を濃く太く */
+  border-radius:14px;
+
+  outline:none;
+}
+
+#topBtn{
+position:fixed;
+right:20px;
+bottom:20px;
+width:110px;
+height:110px;
+border:none;
+border-radius:50%;
+font-size:40px;
+font-weight:bold;
+background:#2563eb;
+color:white;
+box-shadow:0 4px 12px rgba(0,0,0,.3);
+z-index:9999;
+}
+
+#topBtn:active{
+transform:scale(.95);
+}
+#keyword{
+  width:100%;
+  height:100px;
+  font-size:64px;
+  font-weight:bold;
+  padding:0 20px;
+  box-sizing:border-box;
+  border-radius:14px;
+  border:3px solid #2563eb;
+  margin-bottom:10px;
+}
+
+.btns{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:8px;
+}
+
+.btns button{
+height:100px;
+font-size:48px;
+font-weight:bold;
+border-radius:12px;
+}
+
+.plus{
+  background:#10b981;
+  color:white;
+}
+
+.minus{
+  background:#ef4444;
+  color:white;
+}
+.type{
+  font-size:52px;
+  font-weight:800;
+  color:#7c3aed;
+}
+
+.size{
+  font-size:52px;
+  font-weight:800;
+  color:#ff0000;
+}
+#cameraBtn{
+  width:100%;
+  height:100px;
+  font-size:48px;
+  font-weight:bold;
+  background:#f59e0b;
+  color:white;
+  border:none;
+  border-radius:14px;
+  margin-bottom:10px;
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+</head>
+
+<body>
+
+<div class="topbar">
+
+ 
+
+<select id="supplier" onchange="updateProducts();render()">
+<option value="">全商品検索</option>
+</select>
+
+<select id="jump" onchange="render()">
+<option value="">商品</option>
+</select>
+<button
+id="cameraBtn"
+onclick="document.getElementById('qrFile').click()">
+📷 QR読み込み
+</button>
+
+<input
+id="qrFile"
+type="file"
+accept="image/*"
+capture="environment"
+style="display:none;">
+
+ <input
+type="text"
+id="keyword"
+placeholder="キーワード検索"
+oninput="onSearch()"
+onfocus="zoomOn()"
+onblur="zoomOff()">
+
+</div>
+<input
+id="qrFile"
+type="file"
+accept="image/*"
+capture="environment"
+style="display:none;">
+
+<canvas
+id="qrCanvas"
+style="display:none;">
+</canvas>
+<div id="list"></div>
+
+
+<button id="topBtn" onclick="goTop()">↑</button>
+
+<script>
+
+let DATA = [];
+
+ const GAS_URL =
+"https://script.google.com/macros/s/AKfycbwYBYPrPt6_-F6KJ0fBAl5mfRWzzvEi976jYX4-16Bw3NSbhtOVkgnTy__vqVPrdE8g/exec";
+
+// QRで呼び出した商品コード
+let QR_SEARCH = "";
+
+// ★ここに全部まとめる（最上部）
+function normalize(str){
+  return String(str || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .replace(/[ぁ-ん]/g, s =>
+      String.fromCharCode(s.charCodeAt(0) + 0x60)
+    );
+}
+
+function tokenize(str){
+  return normalize(str).match(/[\p{L}\p{N}]+/gu) || [];
+}
+
+function score(itemText, keyword){
+
+  const text = normalize(itemText);
+  const key = normalize(keyword);
+
+  let score = 0;
+
+  if (!key) return 1;
+
+  // ① 完全一致
+  if (text.includes(key)) {
+    return 100;
+  }
+
+  // ② スライド部分一致（Amazonの核心）
+  for (let i = 0; i < key.length - 1; i++) {
+
+    const part = key.slice(i, i + 2); // 2文字単位
+
+    if (text.includes(part)) {
+      score += 10;
+    }
+  }
+
+  // ③ 1文字でもヒット
+  for (let c of key) {
+    if (text.includes(c)) {
+      score += 2;
+    }
+  }
+
+  return score;
+}
+// =====================
+// 商品select更新
+// =====================
+function updateProducts(){
+
+  const supplier =
+    document.getElementById("supplier").value;
+
+  const names = [
+    ...new Set(
+      DATA
+        .filter(item => {
+
+          if(!supplier) return true;
+
+          return item.supplier === supplier;
+
+        })
+        .map(item => item.name)
+    )
+  ];
+
+  document.getElementById("jump").innerHTML =
+    '<option value="">商品</option>' +
+
+    names.map(name =>
+      `<option value="${name}">${name}</option>`
+    ).join("");
+
+}
+
+
+// =====================
+// データ取得
+// =====================
+async function load(){
+
+  const res = await fetch(
+    GAS_URL + "?api=1"
+  );
+
+  DATA = await res.json();
+
+  updateProducts();
+
+  render();
+
+}
+
+document.getElementById("keyword")
+.addEventListener("input", function () {
+
+  // 商品選択を解除
+  document.getElementById("jump").value = "";
+
+  render();
+
+});
+
+// =====================
+// 描画
+// =====================
+function render(){
+
+  const supplier = document.getElementById("supplier").value;
+  const product  = document.getElementById("jump").value;
+  const keyword  = document.getElementById("keyword").value;
+
+  let list = [];
+
+  DATA.forEach(item => {
+
+    if (supplier && item.supplier !== supplier) return;
+    if (product && item.name !== product) return;
+
+     // QR表示中なら該当商品だけ表示
+if (
+  QR_SEARCH &&
+  (item.supplier + "|" + item.name) !== QR_SEARCH
+){
+  return;
+}
+
+   const text = normalize(
+  item.supplier +
+  item.name +
+  item.type +
+  item.size +
+  item.code
+);
+
+    const s = keyword ? score(text, keyword) : 1;
+
+    if (keyword && s === 0) return;
+
+    list.push({ item, score: s });
+  });
+
+  // ★重要：スコア順（Amazonの本体）
+  list.sort((a,b) => b.score - a.score);
+
+  let html = "";
+
+  list.forEach(obj => {
+
+    const item = obj.item;
+
+  html += `
+  <div class="card" id="item_${item.row}">
+
+    <div class="name">${item.name}</div>
+
+    <div class="type">${item.type || ""}</div>
+
+    <div class="size">${item.size || ""}</div>
+
+    <div class="stock" id="s${item.row}">
+      ${item.stock}
+    </div>
+
+   <input type="tel"
+  id="q${item.row}"
+  class="qty"
+  placeholder="数量">
+
+   <div class="btns">
+  <button class="plus" onclick="chg(${item.row},1)">＋</button>
+  <button class="minus" onclick="chg(${item.row},-1)">－</button>
+</div>
+
+  </div>
+`;
+  });
+
+  document.getElementById("list").innerHTML = html;
+}
+
+// =====================
+// 在庫変更
+// =====================
+async function chg(row,mode){
+
+  const box = document.getElementById("q"+row);
+  const qty = Number(box.value);
+
+  if(!qty || qty <= 0) return;
+
+  const diff = mode > 0 ? qty : -qty;
+
+  const stockEl = document.getElementById("s"+row);
+
+  let current = Number(stockEl.innerText) || 0;
+
+  current += diff;
+
+  if(current < 0){
+    current = 0;
+  }
+
+  stockEl.innerText = current;
+
+  box.value="";
+
+ await fetch(
+  GAS_URL,
+  {
+    method:"POST",
+    body:JSON.stringify({
+      row:row,
+      diff:diff
+    })
+  }
+);
+
+}
+
+// =====================
+// 上へ
+// =====================
+function goTop(){
+
+  window.scrollTo({
+    top:0,
+    behavior:"smooth"
+  });
+
+}
+
+// =====================
+// ズーム制御
+// =====================
+function zoomOn(){
+
+  document
+  .querySelector('meta[name="viewport"]')
+  .setAttribute(
+    "content",
+    "width=device-width,initial-scale=1"
+  );
+
+}
+
+function zoomOff(){
+
+  document
+  .querySelector('meta[name="viewport"]')
+  .setAttribute(
+    "content",
+    "width=device-width,initial-scale=1,maximum-scale=1"
+  );
+
+}
+// =====================
+// QR読取
+// =====================
+
+document.getElementById("qrFile")
+.addEventListener("change", function(e){
+
+  const file = e.target.files[0];
+  if(!file) return;
+
+  const img = new Image();
+
+  img.onload = function(){
+
+    const canvas =
+      document.getElementById("qrCanvas");
+
+    const ctx =
+      canvas.getContext("2d");
+
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    ctx.drawImage(img,0,0);
+
+    const imageData =
+      ctx.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+    const code = jsQR(
+      imageData.data,
+      canvas.width,
+      canvas.height
+    );
+
+    if(code){
+
+      QR_SEARCH = code.data;
+
+      alert("読取成功\n" + QR_SEARCH);
+
+      render();
+
+    }else{
+
+      alert("QRが見つかりません");
+
+    }
+
+  };
+
+  img.src = URL.createObjectURL(file);
+
+});
+
+// 起動
+load();
+
+</script>
+
+<canvas id="qrCanvas" style="display:none;"></canvas>
+
+</body>
+</html>
