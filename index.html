@@ -544,20 +544,28 @@ function render(){
     if (product && item.name !== product) return;
 
     
-// QR表示中なら該当商品だけ表示
-// QR表示中なら商品コード一致
+// QR表示中なら検索
 if(QR_SEARCH){
 
 const qr =
 normalize(QR_SEARCH);
 
-const code =
+const target =
 normalize(
-item.code
+[
+item.code,
+item.name,
+item.supplier,
+item.type,
+item.size
+]
+.filter(v=>v)
+.join(" ")
 );
 
+/* 部分一致 */
 if(
-code !== qr
+!target.includes(qr)
 ){
 return;
 }
@@ -742,17 +750,13 @@ qrbox:220
 
 (decoded)=>{
 
-alert(
-"読取成功"
-);
-
 QR_SEARCH =
 String(decoded)
 .trim()
 .replace(/\s/g,"");
 
-alert(
-"検索：" +
+console.log(
+"検索:",
 QR_SEARCH
 );
 
