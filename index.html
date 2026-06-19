@@ -414,7 +414,7 @@ let DATA = [];
  const GAS_URL =
 "https://script.google.com/macros/s/AKfycbwYBYPrPt6_-F6KJ0fBAl5mfRWzzvEi976jYX4-16Bw3NSbhtOVkgnTy__vqVPrdE8g/exec";
 
-// QRで呼び出した商品コード
+// QRで呼び出した検索文字列
 let QR_SEARCH = "";
 
 // ★ここに全部まとめる（最上部）
@@ -540,21 +540,20 @@ function render(){
     if (product && item.name !== product) return;
 
     
-// QR表示中なら supplier|name 一致
+// QR表示中なら supplier+name 検索
 if(QR_SEARCH){
 
 const qr =
 normalize(QR_SEARCH);
 
-const key =
+const target =
 normalize(
 (item.supplier || "") +
-"|" +
 (item.name || "")
 );
 
 if(
-key !== qr
+!target.includes(qr)
 ){
 return;
 }
@@ -751,7 +750,13 @@ height:size
 QR_SEARCH =
 String(decoded)
 .trim()
-.replace(/\s/g,"");
+.replace(/\s/g,"")
+.replace(/\|/g,"");
+
+console.log(
+"QR:",
+QR_SEARCH
+);
 
 console.log(
 "検索:",
