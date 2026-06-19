@@ -545,32 +545,19 @@ function render(){
 
     
 // QR表示中なら該当商品だけ表示
+// QR表示中なら商品コード一致
 if(QR_SEARCH){
 
 const qr =
 normalize(QR_SEARCH);
 
-const target =
+const code =
 normalize(
-[
-item.code,
-item.name,
-item.supplier,
-item.type,
-item.size
-]
-.filter(Boolean)
-.join(" ")
-);
-
-console.log(
-"QR",
-qr,
-target
+item.code
 );
 
 if(
-!target.includes(qr)
+code !== qr
 ){
 return;
 }
@@ -761,7 +748,13 @@ alert(
 
 QR_SEARCH =
 String(decoded)
-.trim();
+.trim()
+.replace(/\s/g,"");
+
+alert(
+"検索：" +
+QR_SEARCH
+);
 
 /* 検索解除 */
 document.getElementById(
