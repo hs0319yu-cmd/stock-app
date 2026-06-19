@@ -719,6 +719,34 @@ async function chg(row,mode){
     })
   }
 );
+// 入力欄からフォーカス外す
+box.blur();
+
+// 少し待って元位置へ戻す
+setTimeout(()=>{
+
+const card =
+document.getElementById(
+`item_${row}`
+);
+
+if(card){
+
+const top =
+card.getBoundingClientRect().top
++
+window.pageYOffset
+-
+90; // ヘッダー高さ
+
+window.scrollTo({
+top,
+behavior:"instant"
+});
+
+}
+
+},50);
 
 }
 
