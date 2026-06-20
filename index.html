@@ -704,7 +704,7 @@ function render(){
         LOCAL_USED[item.row] = 0;
       }
 
-      let scoreVal = scoreItem(item, keyword, supplier, product);
+      let scoreVal = score(item, keyword);
       if(scoreVal === 0) return;
 
       // =====================
