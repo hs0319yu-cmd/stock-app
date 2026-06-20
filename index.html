@@ -476,6 +476,11 @@ function onFocusQty(row){
 // QRで呼び出した検索文字列
 let QR_SEARCH = "";
 
+// ★これをここに追加（重要）
+let LOCAL_USED = JSON.parse(
+  localStorage.getItem("LOCAL_USED") || "{}"
+);
+
 // QR解除
 function clearQR(){
 
@@ -500,6 +505,17 @@ function normalize(str){
 
 function tokenize(str){
   return normalize(str).match(/[\p{L}\p{N}]+/gu) || [];
+}
+
+function isServerReset(item){
+
+  return (
+    item.stock === 0 ||
+    item.stock === null ||
+    item.stock === "" ||
+    item.stock === undefined
+  );
+
 }
 
 function score(itemText, keyword){
@@ -656,117 +672,120 @@ render();
 setTimeout(adjustHeader,100);
 
 }
+
+
+function getStock(item){
+
+  if(isServerReset(item)){
+    return 0;
+  }
+
+  return LOCAL_USED[item.row] ?? 0;
+}
+
+
 // =====================
 // 描画
 // =====================
 function render(){
 
-  const supplier = document.getElementById("supplier").value;
-  const product  = document.getElementById("jump").value;
-  const keyword  = document.getElementById("keyword").value;
+  requestAnimationFrame(()=>{
 
-  let list = [];
+    const supplier = document.getElementById("supplier").value;
+    const product  = document.getElementById("jump").value;
+    const keyword  = document.getElementById("keyword").value;
 
-  DATA.forEach(item => {
+    let list = [];
 
-    if (supplier && item.supplier !== supplier) return;
-    if (product && item.name !== product) return;
+    DATA.forEach(item => {
 
-    
-// QR表示中なら
-// supplier|name|type 一致
-if(QR_SEARCH){
+      // ★サーバーリセット判定
+      if(isServerReset(item)){
+        LOCAL_USED[item.row] = 0;
+      }
 
-const qr =
-normalize(QR_SEARCH);
+      let scoreVal = scoreItem(item, keyword, supplier, product);
+      if(scoreVal === 0) return;
 
-const target =
-normalize(
-(item.supplier || "") +
-"|" +
-(item.name || "") +
-"|" +
-(item.type || "")
-);
+      // =====================
+      // QRフィルタ
+      // =====================
+      if(QR_SEARCH){
 
-console.log(
-"QR=",
-qr
-);
+        const qr = normalize(QR_SEARCH);
 
-console.log(
-"TARGET=",
-target
-);
+        const target = normalize(
+          (item.supplier || "") +
+          "|" +
+          (item.name || "") +
+          "|" +
+          (item.type || "")
+        );
 
-if(
-target !== qr
-){
-return;
-}
+        if(target !== qr){
+          return;
+        }
+      }
 
-}
+      list.push({
+        item,
+        score: scoreVal
+      });
 
+    });
 
-   const text = normalize(
-  item.supplier +
-  item.name +
-  item.type +
-  item.size +
-  item.code
-);
+    // ★スコア順
+    list.sort((a,b)=>b.score - a.score);
 
-    const s = keyword ? score(text, keyword) : 1;
+    let html = "";
 
-    if (keyword && s === 0) return;
+    list.forEach(obj => {
 
-    list.push({ item, score: s });
+      const item = obj.item;
+
+      html += `
+        <div class="card" id="item_${item.row}">
+
+          <div class="name">${item.name}</div>
+
+          <div class="type">${item.type || ""}</div>
+
+          <div class="size">${item.size || ""}</div>
+
+          <div class="stock" id="s${item.row}">
+            ${LOCAL_USED[item.row] ?? 0}
+          </div>
+
+          <input
+            type="tel"
+            id="q${item.row}"
+            class="qty"
+            placeholder="数量"
+            onfocus="onFocusQty(${item.row})"
+            onblur="setTimeout(restoreScroll, 0)"
+            oninput="saveQty(${item.row}, this.value)"
+          >
+
+          <div class="btns">
+            <button class="plus" onclick="chg(${item.row},1)">＋</button>
+            <button class="minus" onclick="chg(${item.row},-1)">－</button>
+          </div>
+
+        </div>
+      `;
+    });
+
+    document.getElementById("list").innerHTML = html;
+
+    localStorage.setItem(
+      "LOCAL_USED",
+      JSON.stringify(LOCAL_USED)
+    );
+
+    setTimeout(adjustHeader,0);
+
   });
 
-  // ★重要：スコア順（Amazonの本体）
-  list.sort((a,b) => b.score - a.score);
-
-  let html = "";
-
-  list.forEach(obj => {
-
-    const item = obj.item;
-
-  html += `
-  <div class="card" id="item_${item.row}">
-
-    <div class="name">${item.name}</div>
-
-    <div class="type">${item.type || ""}</div>
-
-    <div class="size">${item.size || ""}</div>
-
-    <div class="stock" id="s${item.row}">
-      ${item.stock}
-    </div>
-
-   <input
-  type="tel"
-  id="q${item.row}"
-  class="qty"
-  placeholder="数量"
-  onfocus="onFocusQty(${item.row})"
-  onblur="setTimeout(restoreScroll, 0)">
-
-
-   <div class="btns">
-  <button class="plus" onclick="chg(${item.row},1)">＋</button>
-  <button class="minus" onclick="chg(${item.row},-1)">－</button>
-</div>
-
-  </div>
-`;
-  });
-
- document.getElementById("list").innerHTML = html;
-
-/* ★ヘッダー高さ再計算 */
-setTimeout(adjustHeader,0);
 }
 
 /* ←ここに追加 */
@@ -781,7 +800,6 @@ function searchRender(){
     const keyword =
       document.getElementById("keyword").value.trim();
 
-    // ★検索開始したら「全体検索に戻す」
     if(keyword){
 
       document.getElementById("supplier").value = "";
@@ -797,6 +815,18 @@ function searchRender(){
 
 }
 
+
+function saveQty(row, val){
+
+  val = Number(val) || 0;
+
+  LOCAL_USED[row] = val;
+
+  localStorage.setItem(
+    "LOCAL_USED",
+    JSON.stringify(LOCAL_USED)
+  );
+}
 // =====================
 // 在庫変更
 // =====================
