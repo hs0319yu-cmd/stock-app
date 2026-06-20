@@ -363,7 +363,22 @@ select,
 }
 
 }
+body{
+  margin:0;
+}
 
+#list{
+  margin-top:0;
+}
+
+.topbar{
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  z-index:999;
+  background:white;
+}
 </style>
 <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
@@ -374,20 +389,11 @@ select,
 
  
 
-<select id="supplier"
-onchange="
-QR_SEARCH='';
-updateProducts();
-render();
-">
+<select id="supplier" onchange="updateProducts();render()">
 <option value="">全商品検索</option>
 </select>
 
-<select id="jump"
-onchange="
-QR_SEARCH='';
-render();
-">
+<select id="jump" onchange="render()">
 <option value="">商品</option>
 </select>
 <button
@@ -630,18 +636,36 @@ function render(){
     
 // QR表示中なら
 // supplier|name|type 一致
-if(
-QR_SEARCH &&
+if(QR_SEARCH){
+
+const qr =
+normalize(QR_SEARCH);
+
+const target =
 normalize(
 (item.supplier || "") +
 "|" +
 (item.name || "") +
 "|" +
 (item.type || "")
-)
-!== normalize(QR_SEARCH)
+);
+
+console.log(
+"QR=",
+qr
+);
+
+console.log(
+"TARGET=",
+target
+);
+
+if(
+target !== qr
 ){
 return;
+}
+
 }
 
 
@@ -702,24 +726,22 @@ return;
 
  document.getElementById("list").innerHTML = html;
 
+/* ★ヘッダー高さ再計算 */
+setTimeout(adjustHeader,0);
 }
-function clearQR(){
 
-  QR_SEARCH = "";
-
-}
 /* ←ここに追加 */
 let searchTimer;
 
 function searchRender(){
 
-  clearQR();
-
   clearTimeout(searchTimer);
 
   searchTimer = setTimeout(()=>{
 
-    render();   
+    render();
+
+    window.scrollTo(0,0);
 
   },100);
 
@@ -904,10 +926,6 @@ scanner = null;
 
 reader.style.display =
 "none";
-
-render();
-
-setTimeout(()=>{
 
 window.scrollTo(
 0,
