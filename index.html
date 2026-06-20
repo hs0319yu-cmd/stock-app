@@ -730,12 +730,23 @@ return;
 setTimeout(adjustHeader,0);
 }
 
+/* ←ここに追加 */
+let searchTimer;
+
 function searchRender(){
 
-  window.scrollTo(0,0);
-  render();
+  clearTimeout(searchTimer);
+
+  searchTimer = setTimeout(()=>{
+
+    render();
+
+    window.scrollTo(0,0);
+
+  },100);
 
 }
+
 // =====================
 // 在庫変更
 // =====================
