@@ -19,14 +19,6 @@ body{
 font-family:sans-serif;
 background:#f5f5f5;
 }
-:root{
-  --header-h: 200px;
-}
-
-body{
-  margin:0;
-  padding-top: var(--header-h);
-}
 
 html{
   scroll-padding-top: var(--header-h);
@@ -371,8 +363,13 @@ select,
 }
 
 }
+body{
+  margin:0;
+  padding-top:0;
+}
+
 .topbar{
-  position: fixed;
+  position:fixed;
   top:0;
   left:0;
   right:0;
@@ -544,7 +541,26 @@ ${v}
 
 }
 
+function adjustHeader(){
 
+  const h =
+    document.querySelector(".topbar")
+    .offsetHeight;
+
+  document.body.style.paddingTop =
+    h + "px";
+
+}
+
+window.addEventListener(
+  "load",
+  adjustHeader
+);
+
+window.addEventListener(
+  "resize",
+  adjustHeader
+);
 // =====================
 // データ取得
 // =====================
@@ -713,6 +729,7 @@ return;
   });
 
   document.getElementById("list").innerHTML = html;
+    adjustHeader();
 }
 
 // =====================
