@@ -543,13 +543,12 @@ ${v}
 
 function adjustHeader(){
 
-  const h =
-    document.querySelector(".topbar")
-    .offsetHeight;
+ const h =
+ document.querySelector(".topbar")
+ .offsetHeight;
 
-  document.body.style.paddingTop =
-    h + "px";
-
+ document.body.style.paddingTop =
+ (h + 15) + "px";
 }
 
 window.addEventListener(
@@ -606,22 +605,10 @@ updateProducts();
 /* 初回表示 */
 render();
 
-}
-
-document
-.getElementById("keyword")
-.addEventListener(
-"input",
-function(){
-
-document
-.getElementById("jump")
-.value = "";
-
-render();
+/* ★ヘッダー高さ調整 */
+setTimeout(adjustHeader,100);
 
 }
-);
 // =====================
 // 描画
 // =====================
@@ -728,8 +715,10 @@ return;
 `;
   });
 
-  document.getElementById("list").innerHTML = html;
-    adjustHeader();
+ document.getElementById("list").innerHTML = html;
+
+/* ★ヘッダー高さ再計算 */
+adjustHeader();
 }
 
 // =====================
