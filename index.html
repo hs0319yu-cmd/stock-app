@@ -183,7 +183,8 @@ border-radius:12px;
 display:none;
 
 position:fixed;
-top:70px;
+top:140px;
+
 left:50%;
 transform:translateX(-50%);
 
@@ -398,11 +399,20 @@ body{
 
  
 
-<select id="supplier" onchange="updateProducts();render()">
+<select id="supplier"
+onchange="
+clearQR();
+updateProducts();
+render();
+">
 <option value="">全商品検索</option>
 </select>
 
-<select id="jump" onchange="render()">
+<select id="jump"
+onchange="
+QR_SEARCH='';
+render();
+">
 <option value="">商品</option>
 </select>
 <button
@@ -454,6 +464,18 @@ function onFocusQty(row){
 
 // QRで呼び出した検索文字列
 let QR_SEARCH = "";
+
+// QR解除
+function clearQR(){
+
+QR_SEARCH = "";
+
+document.getElementById(
+"cameraBtn"
+).innerText =
+"📷 QR読み込み";
+
+}
 
 // ★ここに全部まとめる（最上部）
 function normalize(str){
@@ -898,6 +920,15 @@ String(decoded)
 .replace(/\s/g,"");
 
 document.getElementById(
+"cameraBtn"
+).innerText =
+"📷 QR解除";
+
+document.getElementById(
+"supplier"
+).value = "";
+
+document.getElementById(
 "jump"
 ).value = "";
 
@@ -919,12 +950,12 @@ scanner = null;
 reader.style.display =
 "none";
 
+render();
+
 window.scrollTo(
 0,
-LAST_SCROLL
+0
 );
-
-render();
 
 },
 
