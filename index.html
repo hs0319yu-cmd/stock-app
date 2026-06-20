@@ -413,7 +413,7 @@ style="display:none;">
 type="text"
 id="keyword"
 placeholder="キーワード検索"
-oninput="render()"
+oninput="searchRender()"
 onfocus="zoomOn()"
 onblur="zoomOff()">
 
@@ -730,6 +730,12 @@ return;
 setTimeout(adjustHeader,0);
 }
 
+function searchRender(){
+
+  window.scrollTo(0,0);
+  render();
+
+}
 // =====================
 // 在庫変更
 // =====================
