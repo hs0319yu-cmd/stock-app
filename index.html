@@ -924,12 +924,16 @@ scanner = null;
 reader.style.display =
 "none";
 
+render();
+
+setTimeout(()=>{
+
 window.scrollTo(
 0,
 LAST_SCROLL
 );
 
-render();
+},0);
 
 },
 
