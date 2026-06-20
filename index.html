@@ -888,61 +888,44 @@ new Html5Qrcode(
 await scanner.start(
 
 {
-facingMode:"environment"
+  facingMode:"environment"
 },
 
 {
-fps:15,
+  fps:20,
 
-qrbox:(w,h)=>{
-
-const size =
-Math.min(w,h)*0.7;
-
-return{
-width:size,
-height:size
-};
-
-}
+  qrbox:{
+    width:280,
+    height:280
+  }
 
 },
 
 async(decoded)=>{
 
-QR_SEARCH =
-String(decoded)
-.trim()
-.replace(/\s/g,"");
+  QR_SEARCH =
+  String(decoded)
+  .trim()
+  .replace(/\s/g,"");
 
-document.getElementById(
-"jump"
-).value="";
+  document.getElementById("jump").value="";
+  document.getElementById("keyword").value="";
 
-document.getElementById(
-"keyword"
-).value="";
+  try{
+    await scanner.stop();
+  }catch(e){}
 
-// 停止
-try{
-await scanner.stop();
-}catch(e){}
+  try{
+    await scanner.clear();
+  }catch(e){}
 
-try{
-await scanner.clear();
-}catch(e){}
+  scanner = null;
 
-scanner = null;
+  reader.style.display="none";
 
-reader.style.display =
-"none";
+  window.scrollTo(0,LAST_SCROLL);
 
-window.scrollTo(
-0,
-LAST_SCROLL
-);
-
-render();
+  render();
 
 },
 
