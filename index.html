@@ -183,21 +183,20 @@ border-radius:12px;
 display:none;
 
 position:fixed;
-top:58px;
-left:0;
-right:0;
+top:70px;
+left:50%;
+transform:translateX(-50%);
 
-width:320px;
-height:320px;
-
-margin:auto;
+width:300px;
+height:300px;
 
 z-index:9999;
+background:black;
 }
 
 #reader video{
-width:100% !important;
-height:100% !important;
+width:300px !important;
+height:300px !important;
 object-fit:cover !important;
 }
 
@@ -889,9 +888,6 @@ qrbox:{
 width:250,
 height:250
 },
-
-aspectRatio:1.777
-
 },
 
 async(decoded)=>{
