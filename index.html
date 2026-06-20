@@ -475,18 +475,7 @@ function onFocusQty(row){
 
 // QRで呼び出した検索文字列
 let QR_SEARCH = "";
-
-// ★これをここに追加（重要）
-let LOCAL_USED = JSON.parse(
-  localStorage.getItem("LOCAL_USED") || "{}"
-);
-// 👇ここに追加（修正③）
-function loadLocal(){
-  LOCAL_USED =
-    JSON.parse(localStorage.getItem("LOCAL_USED") || "{}");
-}
-
-window.addEventListener("load", loadLocal);
+let LOCAL_USED = {};
 // QR解除
 function clearQR(){
 
@@ -634,49 +623,41 @@ window.addEventListener(
 // =====================
 async function load(){
 
-const res =
-await fetch(
-GAS_URL + "?api=1"
-);
+  // ★ローカル復元（最優先）
+  LOCAL_USED = JSON.parse(
+    localStorage.getItem("LOCAL_USED") || "{}"
+  );
 
-DATA =
-await res.json();
+  // ★サーバー取得
+  const res = await fetch(GAS_URL + "?api=1");
+  DATA = await res.json();
 
-/* 仕入先一覧 */
-const supplierEl =
-document.getElementById(
-"supplier"
-);
+  /* 仕入先一覧 */
+  const supplierEl =
+    document.getElementById("supplier");
 
-supplierEl.innerHTML =
+  supplierEl.innerHTML =
+    '<option value="">全商品検索</option>' +
+    [
+      ...new Set(
+        DATA
+          .map(v => v.supplier)
+          .filter(Boolean)
+      )
+    ]
+    .map(v =>
+      `<option value="${v}">${v}</option>`
+    )
+    .join("");
 
-'<option value="">全商品検索</option>' +
+  /* 商品一覧更新 */
+  updateProducts();
 
-[
-...new Set(
-DATA
-.map(v=>v.supplier)
-.filter(Boolean)
-)
-]
-.map(v=>
+  /* 初回表示 */
+  render();
 
-`<option value="${v}">
-${v}
-</option>`
-
-)
-.join("");
-
-/* 商品一覧更新 */
-updateProducts();
-
-/* 初回表示 */
-render();
-
-/* ★ヘッダー高さ調整 */
-setTimeout(adjustHeader,100);
-
+  /* ヘッダー高さ調整 */
+  setTimeout(adjustHeader, 100);
 }
 
 
