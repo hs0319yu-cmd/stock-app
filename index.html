@@ -827,6 +827,32 @@ function saveQty(row, val){
     JSON.stringify(LOCAL_USED)
   );
 }
+function saveAll(){
+
+  const inputs = document.querySelectorAll(".qty");
+
+  inputs.forEach(input => {
+
+    const row = input.id.replace("q","");
+    const val = Number(input.value) || 0;
+
+    LOCAL_USED[row] = val;
+
+  });
+
+  localStorage.setItem(
+    "LOCAL_USED",
+    JSON.stringify(LOCAL_USED)
+  );
+
+}
+window.addEventListener("beforeunload", saveAll);
+
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "hidden"){
+    saveAll();
+  }
+});
 // =====================
 // 在庫変更
 // =====================
