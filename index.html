@@ -180,16 +180,21 @@ border-radius:12px;
   margin-bottom:10px;
 }
 #reader{
-display:none;
-width:100%;
-max-width:500px;
-margin:10px auto;
+  display:none;
+  width:100%;
+  max-width:500px;
+  margin:auto;
+  position:relative;
+  z-index:1;
 }
 
 #reader video{
-width:100% !important;
-height:auto !important;
-object-fit:contain !important;
+  width:100% !important;
+  height:auto !important;
+
+  max-height:60vh !important;
+
+  object-fit:contain !important;
 }
 /* =========================
 スマホだけ縮小（PCそのまま）
@@ -867,7 +872,12 @@ window.scrollTo(
 // 表示
 reader.style.display =
 "block";
+const h =
+document.querySelector(".topbar")
+.getBoundingClientRect().height;
 
+reader.style.paddingTop =
+(h + 10) + "px";
 try{
 
 scanner =
