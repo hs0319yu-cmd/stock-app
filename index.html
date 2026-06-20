@@ -674,16 +674,6 @@ setTimeout(adjustHeader,100);
 }
 
 
-function getStock(item){
-
-  if(isServerReset(item)){
-    return 0;
-  }
-
-  return LOCAL_USED[item.row] ?? 0;
-}
-
-
 // =====================
 // 描画
 // =====================
@@ -756,12 +746,12 @@ function render(){
             ${LOCAL_USED[item.row] ?? 0}
           </div>
 
-          <input
+         <input
   type="tel"
   id="q${item.row}"
   class="qty"
-  value="${LOCAL_USED[item.row] ?? 0}"
   placeholder="数量"
+  value="${LOCAL_USED[item.row] ?? ''}"
   onfocus="onFocusQty(${item.row})"
   onblur="setTimeout(restoreScroll, 0)"
   oninput="saveQty(${item.row}, this.value)"
