@@ -183,7 +183,7 @@ border-radius:12px;
 display:none;
 
 position:fixed;
-top:140px;
+top:200px;
 
 left:50%;
 transform:translateX(-50%);
@@ -580,11 +580,13 @@ function adjustHeader(){
   const topbar =
     document.querySelector(".topbar");
 
-  if(!topbar) return;
+  const h =
+    topbar.getBoundingClientRect().height;
 
-  
+  document.getElementById("list")
+    .style.marginTop =
+      (h + 10) + "px";
 }
-
 window.addEventListener(
   "load",
   adjustHeader
