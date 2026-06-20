@@ -433,7 +433,12 @@ type="text"
 id="keyword"
 placeholder="キーワード検索"
 oninput="searchRender()"
-onfocus="zoomOn()"
+onfocus="
+QR_SEARCH='';
+document.getElementById('cameraBtn').innerText='📷 QR読込';
+render();
+zoomOn();
+"
 onblur="zoomOff()">
 
 </div>
