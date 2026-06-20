@@ -363,22 +363,7 @@ select,
 }
 
 }
-body{
-  margin:0;
-}
 
-#list{
-  margin-top:0;
-}
-
-.topbar{
-  position:fixed;
-  top:0;
-  left:0;
-  right:0;
-  z-index:999;
-  background:white;
-}
 </style>
 <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
@@ -717,8 +702,6 @@ return;
 
  document.getElementById("list").innerHTML = html;
 
-/* ★ヘッダー高さ再計算 */
-setTimeout(adjustHeader,0);
 }
 function clearQR(){
 
@@ -736,9 +719,7 @@ function searchRender(){
 
   searchTimer = setTimeout(()=>{
 
-    render();
-
-    window.scrollTo(0,0);
+    render();   
 
   },100);
 
@@ -933,7 +914,7 @@ window.scrollTo(
 LAST_SCROLL
 );
 
-},0);
+render();
 
 },
 
