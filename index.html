@@ -190,13 +190,13 @@ margin-right:auto;
 position:relative;
 z-index:1;
 }
-/*
+
 #reader video{
 width:100% !important;
 height:auto !important;
 object-fit:contain !important;
 }
-*/
+
 /* =========================
 スマホだけ縮小（PCそのまま）
 ========================= */
@@ -893,16 +893,9 @@ facingMode:"environment"
 {
 fps:15,
 
-qrbox:(w,h)=>{
-
-const size =
-Math.min(w,h) * 0.85;
-
-return{
-width:size,
-height:size
-};
-
+qrbox:{
+width:250,
+height:250
 },
 
 aspectRatio:1.777
