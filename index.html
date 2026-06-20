@@ -636,36 +636,18 @@ function render(){
     
 // QR表示中なら
 // supplier|name|type 一致
-if(QR_SEARCH){
-
-const qr =
-normalize(QR_SEARCH);
-
-const target =
+if(
+QR_SEARCH &&
 normalize(
 (item.supplier || "") +
 "|" +
 (item.name || "") +
 "|" +
 (item.type || "")
-);
-
-console.log(
-"QR=",
-qr
-);
-
-console.log(
-"TARGET=",
-target
-);
-
-if(
-target !== qr
+)
+!== normalize(QR_SEARCH)
 ){
 return;
-}
-
 }
 
 
@@ -729,13 +711,25 @@ return;
 /* ★ヘッダー高さ再計算 */
 setTimeout(adjustHeader,0);
 }
+function clearQR(){
 
+  QR_SEARCH = "";
+
+  document.getElementById(
+    "supplier"
+  ).value = "";
+
+  document.getElementById(
+    "jump"
+  ).value = "";
+
+}
 /* ←ここに追加 */
 let searchTimer;
 
 function searchRender(){
 
-  QR_SEARCH = "";
+  clearQR();
 
   clearTimeout(searchTimer);
 
