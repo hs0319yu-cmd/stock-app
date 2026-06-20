@@ -389,11 +389,20 @@ body{
 
  
 
-<select id="supplier" onchange="updateProducts();render()">
+<select id="supplier"
+onchange="
+QR_SEARCH='';
+updateProducts();
+render();
+">
 <option value="">全商品検索</option>
 </select>
 
-<select id="jump" onchange="render()">
+<select id="jump"
+onchange="
+QR_SEARCH='';
+render();
+">
 <option value="">商品</option>
 </select>
 <button
@@ -734,6 +743,8 @@ setTimeout(adjustHeader,0);
 let searchTimer;
 
 function searchRender(){
+  
+  clearQR();
 
   clearTimeout(searchTimer);
 
