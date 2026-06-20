@@ -17,10 +17,12 @@ content="#2563eb">
 
 body{
 font-family:sans-serif;
-margin:0;
 background:#f5f5f5;
 }
 
+html{
+  scroll-padding-top: var(--header-h);
+}
 .topbar{
 position:sticky;
 top:0;
@@ -361,6 +363,22 @@ select,
 }
 
 }
+body{
+  margin:0;
+}
+
+#list{
+  margin-top:0;
+}
+
+.topbar{
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  z-index:999;
+  background:white;
+}
 </style>
 <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
@@ -395,7 +413,7 @@ style="display:none;">
 type="text"
 id="keyword"
 placeholder="キーワード検索"
-oninput="onSearch()"
+oninput="searchRender()"
 onfocus="zoomOn()"
 onblur="zoomOff()">
 
@@ -410,6 +428,17 @@ onblur="zoomOff()">
 <script>
 
 let DATA = [];
+
+let LAST_Y = 0;
+
+// ←ここに置く
+function restoreScroll(){
+  window.scrollTo(0, LAST_Y);
+}
+
+function onFocusQty(row){
+  LAST_Y = window.scrollY;
+}
 
  const GAS_URL =
 "https://script.google.com/macros/s/AKfycbwYBYPrPt6_-F6KJ0fBAl5mfRWzzvEi976jYX4-16Bw3NSbhtOVkgnTy__vqVPrdE8g/exec";
@@ -515,7 +544,30 @@ ${v}
 
 }
 
+function adjustHeader(){
 
+  const topbar =
+    document.querySelector(".topbar");
+
+  if(!topbar) return;
+
+  const h =
+    topbar.getBoundingClientRect().height;
+
+  document.getElementById("list")
+    .style.marginTop =
+      (h + 10) + "px";
+}
+
+window.addEventListener(
+  "load",
+  adjustHeader
+);
+
+window.addEventListener(
+  "resize",
+  adjustHeader
+);
 // =====================
 // データ取得
 // =====================
@@ -561,22 +613,10 @@ updateProducts();
 /* 初回表示 */
 render();
 
-}
-
-document
-.getElementById("keyword")
-.addEventListener(
-"input",
-function(){
-
-document
-.getElementById("jump")
-.value = "";
-
-render();
+/* ★ヘッダー高さ調整 */
+setTimeout(adjustHeader,100);
 
 }
-);
 // =====================
 // 描画
 // =====================
@@ -666,10 +706,14 @@ return;
       ${item.stock}
     </div>
 
-   <input type="tel"
+   <input
+  type="tel"
   id="q${item.row}"
   class="qty"
-  placeholder="数量">
+  placeholder="数量"
+  onfocus="onFocusQty(${item.row})"
+  onblur="setTimeout(restoreScroll, 0)">
+
 
    <div class="btns">
   <button class="plus" onclick="chg(${item.row},1)">＋</button>
@@ -680,7 +724,27 @@ return;
 `;
   });
 
-  document.getElementById("list").innerHTML = html;
+ document.getElementById("list").innerHTML = html;
+
+/* ★ヘッダー高さ再計算 */
+setTimeout(adjustHeader,0);
+}
+
+/* ←ここに追加 */
+let searchTimer;
+
+function searchRender(){
+
+  clearTimeout(searchTimer);
+
+  searchTimer = setTimeout(()=>{
+
+    render();
+
+    window.scrollTo(0,0);
+
+  },100);
+
 }
 
 // =====================
@@ -700,27 +764,20 @@ async function chg(row,mode){
   let current = Number(stockEl.innerText) || 0;
 
   current += diff;
-
-  if(current < 0){
-    current = 0;
-  }
+  if(current < 0) current = 0;
 
   stockEl.innerText = current;
 
-  box.value="";
+  box.value = "";
 
- await fetch(
-  GAS_URL,
-  {
+  await fetch(GAS_URL,{
     method:"POST",
-    body:JSON.stringify({
-      row:row,
-      diff:diff
-    })
-  }
-);
+    body:JSON.stringify({ row, diff })
+  });
 
+  box.blur();
 }
+
 
 // =====================
 // 上へ
