@@ -757,15 +757,15 @@ function render(){
           </div>
 
           <input
-            type="tel"
-            id="q${item.row}"
-            class="qty"
-            placeholder="数量"
-            onfocus="onFocusQty(${item.row})"
-            onblur="setTimeout(restoreScroll, 0)"
-            oninput="saveQty(${item.row}, this.value)"
-          >
-
+  type="tel"
+  id="q${item.row}"
+  class="qty"
+  value="${LOCAL_USED[item.row] ?? 0}"
+  placeholder="数量"
+  onfocus="onFocusQty(${item.row})"
+  onblur="setTimeout(restoreScroll, 0)"
+  oninput="saveQty(${item.row}, this.value)"
+>
           <div class="btns">
             <button class="plus" onclick="chg(${item.row},1)">＋</button>
             <button class="minus" onclick="chg(${item.row},-1)">－</button>
