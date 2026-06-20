@@ -435,8 +435,14 @@ placeholder="キーワード検索"
 oninput="searchRender()"
 onfocus="
 QR_SEARCH='';
-document.getElementById('cameraBtn').innerText='📷 QR読込';
+document.getElementById('cameraBtn').innerText='📷 QR読み込み';
+
+document.getElementById('supplier').value='';
+document.getElementById('jump').value='';
+
+updateProducts();
 render();
+
 zoomOn();
 "
 onblur="zoomOff()">
@@ -772,8 +778,19 @@ function searchRender(){
 
   searchTimer = setTimeout(()=>{
 
-    render();
+    const keyword =
+      document.getElementById("keyword").value.trim();
 
+    // ★検索開始したら「全体検索に戻す」
+    if(keyword){
+
+      document.getElementById("supplier").value = "";
+      document.getElementById("jump").value = "";
+
+      updateProducts();
+    }
+
+    render();
     window.scrollTo(0,0);
 
   },100);
