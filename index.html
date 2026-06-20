@@ -181,20 +181,24 @@ border-radius:12px;
 }
 #reader{
 display:none;
-width:100%;
-max-width:500px;
 
-margin-left:auto;
-margin-right:auto;
+position:fixed;
+top:58px;
+left:0;
+right:0;
 
-position:relative;
-z-index:1;
+width:320px;
+height:320px;
+
+margin:auto;
+
+z-index:9999;
 }
 
 #reader video{
 width:100% !important;
-height:auto !important;
-object-fit:contain !important;
+height:100% !important;
+object-fit:cover !important;
 }
 
 /* =========================
@@ -557,12 +561,7 @@ function adjustHeader(){
 
   if(!topbar) return;
 
-  const h =
-    topbar.getBoundingClientRect().height;
-
-  document.getElementById("list")
-    .style.marginTop =
-      (h + 10) + "px";
+  
 }
 
 window.addEventListener(
@@ -869,13 +868,6 @@ window.scrollTo(
 
 // 表示
 reader.style.display = "block";
-
-const h =
-document.querySelector(".topbar")
-.getBoundingClientRect().height;
-
-reader.style.paddingTop =
-(h + 10) + "px";
 
 try{
 
