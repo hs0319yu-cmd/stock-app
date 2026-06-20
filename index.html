@@ -830,9 +830,7 @@ let LAST_SCROLL = 0;
 async function scanQR(){
 
 const reader =
-document.getElementById(
-"reader"
-);
+document.getElementById("reader");
 
 // 既に開いてたら閉じる
 if(scanner){
@@ -847,8 +845,7 @@ await scanner.clear();
 
 scanner = null;
 
-reader.style.display =
-"none";
+reader.style.display = "none";
 
 window.scrollTo(
 0,
@@ -870,14 +867,15 @@ window.scrollTo(
 );
 
 // 表示
-reader.style.display =
-"block";
+reader.style.display = "block";
+
 const h =
 document.querySelector(".topbar")
 .getBoundingClientRect().height;
 
 reader.style.paddingTop =
 (h + 10) + "px";
+
 try{
 
 scanner =
@@ -888,45 +886,63 @@ new Html5Qrcode(
 await scanner.start(
 
 {
-  facingMode:"environment"
+facingMode:"environment"
 },
 
 {
-  fps:15,
+fps:15,
 
-  qrbox:{
-    width:300,
-    height:300
-  },
+qrbox:(w,h)=>{
 
-  aspectRatio:1.777
+const size =
+Math.min(w,h) * 0.85;
+
+return{
+width:size,
+height:size
+};
+
+},
+
+aspectRatio:1.777
+
 },
 
 async(decoded)=>{
 
-  QR_SEARCH =
-  String(decoded)
-  .trim()
-  .replace(/\s/g,"");
+QR_SEARCH =
+String(decoded)
+.trim()
+.replace(/\s/g,"");
 
-  document.getElementById("jump").value="";
-  document.getElementById("keyword").value="";
+document.getElementById(
+"jump"
+).value = "";
 
-  try{
-    await scanner.stop();
-  }catch(e){}
+document.getElementById(
+"keyword"
+).value = "";
 
-  try{
-    await scanner.clear();
-  }catch(e){}
+// 停止
+try{
+await scanner.stop();
+}catch(e){}
 
-  scanner = null;
+try{
+await scanner.clear();
+}catch(e){}
 
-  reader.style.display="none";
+scanner = null;
 
-  window.scrollTo(0,LAST_SCROLL);
+reader.style.display =
+"none";
 
-  render();
+window.scrollTo(
+0,
+LAST_SCROLL
+);
+
+render();
 
 },
 
