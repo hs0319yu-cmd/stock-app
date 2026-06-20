@@ -389,11 +389,20 @@ body{
 
  
 
-<select id="supplier" onchange="updateProducts();render()">
+<select id="supplier"
+onchange="
+clearQR();
+updateProducts();
+render();
+">
 <option value="">全商品検索</option>
 </select>
 
-<select id="jump" onchange="render()">
+<select id="jump"
+onchange="
+clearQR();
+render();
+">
 <option value="">商品</option>
 </select>
 <button
@@ -714,14 +723,6 @@ setTimeout(adjustHeader,0);
 function clearQR(){
 
   QR_SEARCH = "";
-
-  document.getElementById(
-    "supplier"
-  ).value = "";
-
-  document.getElementById(
-    "jump"
-  ).value = "";
 
 }
 /* ←ここに追加 */
