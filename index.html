@@ -719,6 +719,8 @@ function render(){
 
       const item = obj.item;
 
+       const val = LOCAL_USED[item.row] ?? "";
+
       html += `
         <div class="card" id="item_${item.row}">
 
@@ -732,10 +734,11 @@ function render(){
             ${LOCAL_USED[item.row] ?? 0}
           </div>
 
-        <input
+       <input
   type="tel"
   id="q${item.row}"
   class="qty"
+  value="${val}"
   placeholder="数量"
   onfocus="onFocusQty(${item.row})"
   onblur="setTimeout(restoreScroll, 0)"
@@ -751,14 +754,6 @@ function render(){
     });
 
     document.getElementById("list").innerHTML = html;
-
-    // ★ここに入れる（重要）
-Object.keys(LOCAL_USED).forEach(row => {
-  const el = document.getElementById("q" + row);
-  if (el) {
-    el.value = LOCAL_USED[row] ?? "";
-  }
-});
 
     localStorage.setItem(
       "LOCAL_USED",
