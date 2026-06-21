@@ -732,12 +732,11 @@ function render(){
             ${LOCAL_USED[item.row] ?? 0}
           </div>
 
-         <input
+        <input
   type="tel"
   id="q${item.row}"
   class="qty"
   placeholder="数量"
-  value="${LOCAL_USED[item.row] ?? ''}"
   onfocus="onFocusQty(${item.row})"
   onblur="setTimeout(restoreScroll, 0)"
   oninput="saveQty(${item.row}, this.value)"
@@ -752,6 +751,14 @@ function render(){
     });
 
     document.getElementById("list").innerHTML = html;
+
+    // ★ここに入れる（重要）
+Object.keys(LOCAL_USED).forEach(row => {
+  const el = document.getElementById("q" + row);
+  if (el) {
+    el.value = LOCAL_USED[row] ?? "";
+  }
+});
 
     localStorage.setItem(
       "LOCAL_USED",
