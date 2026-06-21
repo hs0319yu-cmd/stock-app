@@ -730,16 +730,13 @@ function render(){
 
           <div class="size">${item.size || ""}</div>
 
-          <div class="stock" id="s${item.row}">
-            ${LOCAL_USED[item.row] ?? 0}
-          </div>
-
+         
        <input
   type="tel"
   id="q${item.row}"
   class="qty"
-  value="${val}"
   placeholder="数量"
+  value="${val}"
   onfocus="onFocusQty(${item.row})"
   onblur="setTimeout(restoreScroll, 0)"
   oninput="saveQty(${item.row}, this.value)"
