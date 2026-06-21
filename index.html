@@ -743,28 +743,17 @@ return;
 
     <div class="size">${item.size || ""}</div>
 
-    <div class="stock" id="s${item.row}">
-      ${item.stock}
-    </div>
+   <div class="stock" id="s${item.row}">
+  0
+</div>
 
-   <input
+  <input
 type="tel"
 id="q${item.row}"
 class="qty"
-value="0"
 placeholder="数量"
-onfocus="
-if(this.value==='0'){
-this.value='';
-}
-onFocusQty(${item.row})
-"
-onblur="
-if(this.value===''){
-this.value='0';
-}
-setTimeout(restoreScroll,0)
-">
+onfocus="onFocusQty(${item.row})"
+onblur="setTimeout(restoreScroll,0)">
 
 
    <div class="btns">
