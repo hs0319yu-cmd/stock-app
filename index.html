@@ -475,7 +475,7 @@ function onFocusQty(row){
 
 // QRで呼び出した検索文字列
 let QR_SEARCH = "";
-let LOCAL_USED = {};
+
 // QR解除
 function clearQR(){
 
@@ -500,17 +500,6 @@ function normalize(str){
 
 function tokenize(str){
   return normalize(str).match(/[\p{L}\p{N}]+/gu) || [];
-}
-
-function isServerReset(item){
-
-  return (
-    item.stock === 0 ||
-    item.stock === null ||
-    item.stock === "" ||
-    item.stock === undefined
-  );
-
 }
 
 function score(itemText, keyword){
@@ -623,144 +612,161 @@ window.addEventListener(
 // =====================
 async function load(){
 
-  // ★ローカル復元（最優先）
-  LOCAL_USED = JSON.parse(
-    localStorage.getItem("LOCAL_USED") || "{}"
-  );
+const res =
+await fetch(
+GAS_URL + "?api=1"
+);
 
-  // ★サーバー取得
-  const res = await fetch(GAS_URL + "?api=1");
-  DATA = await res.json();
+DATA =
+await res.json();
 
-  /* 仕入先一覧 */
-  const supplierEl =
-    document.getElementById("supplier");
+/* 仕入先一覧 */
+const supplierEl =
+document.getElementById(
+"supplier"
+);
 
-  supplierEl.innerHTML =
-    '<option value="">全商品検索</option>' +
-    [
-      ...new Set(
-        DATA
-          .map(v => v.supplier)
-          .filter(Boolean)
-      )
-    ]
-    .map(v =>
-      `<option value="${v}">${v}</option>`
-    )
-    .join("");
+supplierEl.innerHTML =
 
-  /* 商品一覧更新 */
-  updateProducts();
+'<option value="">全商品検索</option>' +
 
-  /* 初回表示 */
-  render();
+[
+...new Set(
+DATA
+.map(v=>v.supplier)
+.filter(Boolean)
+)
+]
+.map(v=>
 
-  /* ヘッダー高さ調整 */
-  setTimeout(adjustHeader, 100);
+`<option value="${v}">
+${v}
+</option>`
+
+)
+.join("");
+
+/* 商品一覧更新 */
+updateProducts();
+
+/* 初回表示 */
+render();
+
+/* ★ヘッダー高さ調整 */
+setTimeout(adjustHeader,100);
+
 }
-
-
 // =====================
 // 描画
 // =====================
 function render(){
 
-  requestAnimationFrame(()=>{
+  const supplier = document.getElementById("supplier").value;
+  const product  = document.getElementById("jump").value;
+  const keyword  = document.getElementById("keyword").value;
 
-    const supplier = document.getElementById("supplier").value;
-    const product  = document.getElementById("jump").value;
-    const keyword  = document.getElementById("keyword").value;
+  let list = [];
 
-    let list = [];
+  DATA.forEach(item => {
 
-    DATA.forEach(item => {
+    if (supplier && item.supplier !== supplier) return;
+    if (product && item.name !== product) return;
 
-      // ★サーバーリセット判定
-      if(isServerReset(item)){       
-      }
+    
+// QR表示中なら
+// supplier|name|type 一致
+if(QR_SEARCH){
 
-      let scoreVal = score(item, keyword);
-      if(scoreVal === 0) return;
+const qr =
+normalize(QR_SEARCH);
 
-      // =====================
-      // QRフィルタ
-      // =====================
-      if(QR_SEARCH){
+const target =
+normalize(
+(item.supplier || "") +
+"|" +
+(item.name || "") +
+"|" +
+(item.type || "")
+);
 
-        const qr = normalize(QR_SEARCH);
+console.log(
+"QR=",
+qr
+);
 
-        const target = normalize(
-          (item.supplier || "") +
-          "|" +
-          (item.name || "") +
-          "|" +
-          (item.type || "")
-        );
+console.log(
+"TARGET=",
+target
+);
 
-        if(target !== qr){
-          return;
-        }
-      }
+if(
+target !== qr
+){
+return;
+}
 
-      list.push({
-        item,
-        score: scoreVal
-      });
+}
 
-    });
 
-    // ★スコア順
-    list.sort((a,b)=>b.score - a.score);
+   const text = normalize(
+  item.supplier +
+  item.name +
+  item.type +
+  item.size +
+  item.code
+);
 
-    let html = "";
+    const s = keyword ? score(text, keyword) : 1;
 
-    list.forEach(obj => {
+    if (keyword && s === 0) return;
 
-      const item = obj.item;
+    list.push({ item, score: s });
+  });
 
-       const val = LOCAL_USED[item.row] ?? "";
+  // ★重要：スコア順（Amazonの本体）
+  list.sort((a,b) => b.score - a.score);
 
-      html += `
-        <div class="card" id="item_${item.row}">
+  let html = "";
 
-          <div class="name">${item.name}</div>
+  list.forEach(obj => {
 
-          <div class="type">${item.type || ""}</div>
+    const item = obj.item;
 
-          <div class="size">${item.size || ""}</div>
+  html += `
+  <div class="card" id="item_${item.row}">
 
-         
-       <input
+    <div class="name">${item.name}</div>
+
+    <div class="type">${item.type || ""}</div>
+
+    <div class="size">${item.size || ""}</div>
+
+    <div class="stock" id="s${item.row}">
+      ${item.stock}
+    </div>
+
+   <input
   type="tel"
   id="q${item.row}"
   class="qty"
   placeholder="数量"
-  value="${val}"
   onfocus="onFocusQty(${item.row})"
-  onblur="setTimeout(restoreScroll, 0)"
-  oninput="saveQty(${item.row}, this.value)"
->
-          <div class="btns">
-            <button class="plus" onclick="chg(${item.row},1)">＋</button>
-            <button class="minus" onclick="chg(${item.row},-1)">－</button>
-          </div>
+  onblur="setTimeout(restoreScroll, 0)">
 
-        </div>
-      `;
-    });
 
-    document.getElementById("list").innerHTML = html;
+   <div class="btns">
+  <button class="plus" onclick="chg(${item.row},1)">＋</button>
+  <button class="minus" onclick="chg(${item.row},-1)">－</button>
+</div>
 
-    localStorage.setItem(
-      "LOCAL_USED",
-      JSON.stringify(LOCAL_USED)
-    );
-
-    setTimeout(adjustHeader,0);
-
+  </div>
+`;
   });
 
+ document.getElementById("list").innerHTML = html;
+
+/* ★ヘッダー高さ再計算 */
+setTimeout(adjustHeader,0);
 }
 
 /* ←ここに追加 */
@@ -775,6 +781,7 @@ function searchRender(){
     const keyword =
       document.getElementById("keyword").value.trim();
 
+    // ★検索開始したら「全体検索に戻す」
     if(keyword){
 
       document.getElementById("supplier").value = "";
@@ -790,44 +797,6 @@ function searchRender(){
 
 }
 
-
-function saveQty(row, val){
-
-  val = Number(val) || 0;
-
-  LOCAL_USED[row] = val;
-
-  localStorage.setItem(
-    "LOCAL_USED",
-    JSON.stringify(LOCAL_USED)
-  );
-}
-function saveAll(){
-
-  const inputs = document.querySelectorAll(".qty");
-
-  inputs.forEach(input => {
-
-    const row = input.id.replace("q","");
-    const val = Number(input.value) || 0;
-
-    LOCAL_USED[row] = val;
-
-  });
-
-  localStorage.setItem(
-    "LOCAL_USED",
-    JSON.stringify(LOCAL_USED)
-  );
-
-}
-window.addEventListener("beforeunload", saveAll);
-
-document.addEventListener("visibilitychange", () => {
-  if(document.visibilityState === "hidden"){
-    saveAll();
-  }
-});
 // =====================
 // 在庫変更
 // =====================
