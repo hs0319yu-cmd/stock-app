@@ -683,9 +683,9 @@ return;
 type="tel"
 id="q${item.row}"
 class="qty"
-placeholder="数量"
+placeholder="${item.supplier || '仕入先なし'}"
 onfocus="onFocusQty(${item.row})"
-onblur="setTimeout(restoreScroll,0)">
+onblur="setTimeout(restoreScroll, 0)">
 
 
    <div class="btns">
