@@ -334,9 +334,9 @@ body{
  
 
 <select id="supplier"
+onfocus="clearKeywordSearch()"
 onchange="
-document.getElementById('keyword').value='';
-QR_SEARCH='';
+clearKeywordSearch();
 clearQR();
 updateProducts();
 render();
@@ -345,9 +345,9 @@ render();
 </select>
 
 <select id="jump"
+onfocus="clearKeywordSearch()"
 onchange="
-document.getElementById('keyword').value='';
-QR_SEARCH='';
+clearKeywordSearch();
 render();
 ">
 <option value="">商品</option>
@@ -357,8 +357,7 @@ render();
 <button
 id="cameraBtn"
 onclick="
-document.getElementById('keyword').value='';
-QR_SEARCH='';
+clearKeywordSearch();
 scanQR();
 ">
 📷 QR読み込み
@@ -712,8 +711,16 @@ onblur="setTimeout(restoreScroll, 0)">
 setTimeout(adjustHeader,0);
 }
 
-/* ←ここに追加 */
+/* 検索窓のキーワード検索を解除 */
 let searchTimer;
+
+function clearKeywordSearch(){
+  clearTimeout(searchTimer);
+  const keywordEl = document.getElementById("keyword");
+  if (keywordEl) keywordEl.value = "";
+  QR_SEARCH = "";
+  render();
+}
 
 function searchRender(){
 
