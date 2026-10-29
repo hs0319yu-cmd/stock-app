@@ -811,35 +811,62 @@ let qrScannerToken = "";
 function scanQR() {
   const cameraBtn = document.getElementById("cameraBtn");
 
-  // 連続起動を防止
-  if (qrScannerWindow && !qrScannerWindow.closed) {
-    qrScannerWindow.focus();
-    return;
+  // 既にスキャナーが開いている場合はそちらを前面へ
+  try {
+    if (qrScannerWindow && !qrScannerWindow.closed) {
+      qrScannerWindow.focus();
+      return;
+    }
+  } catch (e) {
+    qrScannerWindow = null;
   }
 
-  // 読み取りごとの識別トークン
   qrScannerToken =
     Date.now().toString(36) +
     Math.random().toString(36).slice(2);
 
-  // 外部スキャナーを開く
   const scannerUrl =
     "https://hs0319yu-cmd.github.io/qr-scanner/" +
     "?token=" + encodeURIComponent(qrScannerToken);
 
-  // ボタン操作の直後に開き、ポップアップ制限を避ける
-  qrScannerWindow = window.open(
-    scannerUrl,
-    "inventoryQrScanner"
-  );
+  // iPhoneのホーム画面Webアプリでは名前付きwindow.openが
+  // 開かないことがあるため、_blankで開く
+  try {
+    qrScannerWindow = window.open(scannerUrl, "_blank");
+  } catch (e) {
+    qrScannerWindow = null;
+  }
 
   if (!qrScannerWindow) {
+    // ポップアップがブロックされた場合に、ユーザー自身のタップで開けるリンクを表示
+    let fallback = document.getElementById("qrOpenFallback");
+
+    if (!fallback) {
+      fallback = document.createElement("a");
+      fallback.id = "qrOpenFallback";
+      fallback.textContent = "QRスキャナーを開く";
+      fallback.href = scannerUrl;
+      fallback.target = "_blank";
+      fallback.rel = "noopener";
+      fallback.style.cssText =
+        "display:block;margin:10px;padding:16px;background:#2563eb;" +
+        "color:white;text-align:center;font-size:20px;font-weight:bold;" +
+        "border-radius:12px;text-decoration:none;";
+      cameraBtn.insertAdjacentElement("afterend", fallback);
+    } else {
+      fallback.href = scannerUrl;
+      fallback.style.display = "block";
+    }
+
     alert(
-      "QRスキャナーを開けませんでした。\n" +
-      "ブラウザのポップアップ設定を確認してください。"
+      "QRスキャナーを自動で開けませんでした。\n" +
+      "表示された「QRスキャナーを開く」をもう一度タップしてください。"
     );
     return;
   }
+
+  const fallback = document.getElementById("qrOpenFallback");
+  if (fallback) fallback.style.display = "none";
 
   cameraBtn.innerText = "📷 QR読み取り中";
 }
