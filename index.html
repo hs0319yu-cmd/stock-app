@@ -2,16 +2,16 @@
 <html>
 <head>
 
-<meta name="viewport"
-content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 
-<link
-rel="manifest"
-href="manifest.json">
-
-<meta
-name="theme-color"
-content="#2563eb">
+<!-- PWA / iPhone ホーム画面アイコン設定 -->
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="在庫アプリ">
 
 <style>
 
@@ -799,148 +799,99 @@ function zoomOff(){
   );
 
 }
-// =====================
-// QR読取
-// =====================
 
-let scanner = null;
-let LAST_SCROLL = 0;
 
-async function scanQR(){
+/* =====================
+   QR読取：外部HTTPSスキャナー連携
+   ===================== */
 
-const reader =
-document.getElementById("reader");
+let qrScannerWindow = null;
+let qrScannerToken = "";
 
-// 既に開いてたら閉じる
-if(scanner){
+function scanQR() {
+  const cameraBtn = document.getElementById("cameraBtn");
 
-try{
-await scanner.stop();
-}catch(e){}
+  // 連続起動を防止
+  if (qrScannerWindow && !qrScannerWindow.closed) {
+    qrScannerWindow.focus();
+    return;
+  }
 
-try{
-await scanner.clear();
-}catch(e){}
+  // 読み取りごとの識別トークン
+  qrScannerToken =
+    Date.now().toString(36) +
+    Math.random().toString(36).slice(2);
 
-scanner = null;
+  // 外部スキャナーを開く
+  const scannerUrl =
+    "https://hs0319yu-cmd.github.io/qr-scanner/" +
+    "?token=" + encodeURIComponent(qrScannerToken);
 
-reader.style.display = "none";
+  // ボタン操作の直後に開き、ポップアップ制限を避ける
+  qrScannerWindow = window.open(
+    scannerUrl,
+    "inventoryQrScanner"
+  );
 
-window.scrollTo(
-0,
-LAST_SCROLL
-);
+  if (!qrScannerWindow) {
+    alert(
+      "QRスキャナーを開けませんでした。\n" +
+      "ブラウザのポップアップ設定を確認してください。"
+    );
+    return;
+  }
 
-return;
-
+  cameraBtn.innerText = "📷 QR読み取り中";
 }
 
-// 今の位置保存
-LAST_SCROLL =
-window.scrollY;
+// 外部スキャナーからの読み取り結果を受信
+window.addEventListener("message", function(event) {
+  // GitHub Pagesからのメッセージだけを受け付ける
+  if (event.origin !== "https://hs0319yu-cmd.github.io") {
+    return;
+  }
 
-// 一瞬で上へ
-window.scrollTo(
-0,
-0
-);
+  // 今回開いたスキャナーからのメッセージだけを受け付ける
+  if (!qrScannerWindow || event.source !== qrScannerWindow) {
+    return;
+  }
 
-// 表示
-reader.style.display = "block";
+  const data = event.data;
 
-try{
+  if (!data || data.type !== "INVENTORY_QR_RESULT") {
+    return;
+  }
 
-scanner =
-new Html5Qrcode(
-"reader"
-);
+  // 別の起動時の結果を誤って受け取らない
+  if (data.token !== qrScannerToken) {
+    return;
+  }
 
-await scanner.start(
+  const decoded = String(data.value || "").trim();
 
-{
-facingMode:"environment"
-},
+  if (!decoded) {
+    alert("QRコードの内容が空でした。もう一度読み取ってください。");
+    return;
+  }
 
-{
-fps:15,
+  // 既存アプリの検索処理へ渡す
+  QR_SEARCH = decoded;
 
-qrbox:{
-width:250,
-height:250
-},
-},
+  document.getElementById("cameraBtn").innerText =
+    "📷 QR読み込み";
 
-async(decoded)=>{
+  document.getElementById("supplier").value = "";
+  document.getElementById("jump").value = "";
+  document.getElementById("keyword").value = "";
 
-QR_SEARCH =
-String(decoded)
-.trim()
-.replace(/\s/g,"");
+  updateProducts();
+  render();
+  window.scrollTo(0, 0);
 
-document.getElementById(
-"cameraBtn"
-).innerText =
-"📷 QR読み込み";
+  qrScannerWindow = null;
+  qrScannerToken = "";
+});
 
-document.getElementById(
-"supplier"
-).value = "";
-
-document.getElementById(
-"jump"
-).value = "";
-
-document.getElementById(
-"keyword"
-).value = "";
-
-// 停止
-try{
-await scanner.stop();
-}catch(e){}
-
-try{
-await scanner.clear();
-}catch(e){}
-
-scanner = null;
-
-reader.style.display =
-"none";
-
-render();
-
-window.scrollTo(
-0,
-0
-);
-
-},
-
-()=>{}
-
-);
-
-}catch(e){
-
-console.log(e);
-
-try{
-await scanner?.clear();
-}catch(e){}
-
-scanner = null;
-
-reader.style.display =
-"none";
-
-alert(
-"カメラ起動失敗"
-);
-
-}
-
-}
 
 // 起動
 load();
