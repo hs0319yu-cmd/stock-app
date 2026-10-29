@@ -336,6 +336,7 @@ body{
 <select id="supplier"
 onchange="
 clearQR();
+document.getElementById('keyword').value='';
 updateProducts();
 render();
 ">
@@ -345,10 +346,14 @@ render();
 <select id="jump"
 onchange="
 QR_SEARCH='';
+document.getElementById('keyword').value='';
+document.getElementById('cameraBtn').innerText='📷 QR読み込み';
 render();
 ">
 <option value="">商品</option>
 </select>
+    
+    
 <button
 id="cameraBtn"
 onclick="scanQR()">
