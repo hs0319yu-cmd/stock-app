@@ -802,123 +802,139 @@ function zoomOff(){
 
 
 /* =====================
-   QR読取：外部HTTPSスキャナー連携
+   QR読取：在庫アプリ内でライブスキャン
+   Safari / iPhoneホーム画面アプリ対応
    ===================== */
 
-let qrScannerWindow = null;
-let qrScannerToken = "";
+let liveQrScanner = null;
+let qrCameraOverlay = null;
+let qrStarting = false;
 
-function scanQR() {
+function closeQRScanner() {
+  if (liveQrScanner) {
+    const scanner = liveQrScanner;
+    liveQrScanner = null;
+    scanner.stop().catch(() => {}).finally(() => {
+      try { scanner.clear(); } catch (e) {}
+    });
+  }
+  if (qrCameraOverlay) {
+    qrCameraOverlay.remove();
+    qrCameraOverlay = null;
+  }
+  qrStarting = false;
   const cameraBtn = document.getElementById("cameraBtn");
-
-  // 既にスキャナーが開いている場合はそちらを前面へ
-  try {
-    if (qrScannerWindow && !qrScannerWindow.closed) {
-      qrScannerWindow.focus();
-      return;
-    }
-  } catch (e) {
-    qrScannerWindow = null;
-  }
-
-  qrScannerToken =
-    Date.now().toString(36) +
-    Math.random().toString(36).slice(2);
-
-  const scannerUrl =
-    "https://hs0319yu-cmd.github.io/qr-scanner/" +
-    "?token=" + encodeURIComponent(qrScannerToken);
-
-  // iPhoneのホーム画面Webアプリでは名前付きwindow.openが
-  // 開かないことがあるため、_blankで開く
-  try {
-    qrScannerWindow = window.open(scannerUrl, "_blank");
-  } catch (e) {
-    qrScannerWindow = null;
-  }
-
-  if (!qrScannerWindow) {
-    // ポップアップがブロックされた場合に、ユーザー自身のタップで開けるリンクを表示
-    let fallback = document.getElementById("qrOpenFallback");
-
-    if (!fallback) {
-      fallback = document.createElement("a");
-      fallback.id = "qrOpenFallback";
-      fallback.textContent = "QRスキャナーを開く";
-      fallback.href = scannerUrl;
-      fallback.target = "_blank";
-      fallback.rel = "noopener";
-      fallback.style.cssText =
-        "display:block;margin:10px;padding:16px;background:#2563eb;" +
-        "color:white;text-align:center;font-size:20px;font-weight:bold;" +
-        "border-radius:12px;text-decoration:none;";
-      cameraBtn.insertAdjacentElement("afterend", fallback);
-    } else {
-      fallback.href = scannerUrl;
-      fallback.style.display = "block";
-    }
-
-    alert(
-      "QRスキャナーを自動で開けませんでした。\n" +
-      "表示された「QRスキャナーを開く」をもう一度タップしてください。"
-    );
-    return;
-  }
-
-  const fallback = document.getElementById("qrOpenFallback");
-  if (fallback) fallback.style.display = "none";
-
-  cameraBtn.innerText = "📷 QR読み取り中";
+  if (cameraBtn) cameraBtn.innerText = "📷 QR読み込み";
 }
 
-// 外部スキャナーからの読み取り結果を受信
-window.addEventListener("message", function(event) {
-  // GitHub Pagesからのメッセージだけを受け付ける
-  if (event.origin !== "https://hs0319yu-cmd.github.io") {
+async function scanQR() {
+  const cameraBtn = document.getElementById("cameraBtn");
+
+  if (qrStarting || liveQrScanner) return;
+  if (typeof Html5Qrcode === "undefined") {
+    alert("QR読み取りライブラリを読み込めませんでした。通信状態を確認して、もう一度お試しください。");
     return;
   }
 
-  // 今回開いたスキャナーからのメッセージだけを受け付ける
-  if (!qrScannerWindow || event.source !== qrScannerWindow) {
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("この画面ではカメラを起動できません。https:// で開いていることを確認してください。");
     return;
   }
 
-  const data = event.data;
+  qrStarting = true;
+  cameraBtn.innerText = "📷 カメラ起動中…";
 
-  if (!data || data.type !== "INVENTORY_QR_RESULT") {
-    return;
+  // ポップアップや別タブを使わず、現在の在庫アプリ内にカメラ画面を表示
+  qrCameraOverlay = document.createElement("div");
+  qrCameraOverlay.id = "qrCameraOverlay";
+  qrCameraOverlay.style.cssText =
+    "position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.94);" +
+    "display:flex;flex-direction:column;align-items:center;justify-content:center;" +
+    "padding:18px;box-sizing:border-box;";
+
+  const title = document.createElement("div");
+  title.textContent = "QRコードを枠内に映してください";
+  title.style.cssText =
+    "color:white;font-size:18px;font-weight:bold;text-align:center;margin:0 0 14px;";
+
+  const reader = document.createElement("div");
+  reader.id = "qrLiveReader";
+  reader.style.cssText =
+    "width:min(92vw,420px);min-height:260px;background:#111;border-radius:12px;overflow:hidden;";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.textContent = "閉じる";
+  closeBtn.style.cssText =
+    "margin-top:18px;min-height:48px;width:min(92vw,420px);border:0;border-radius:10px;" +
+    "background:#ef4444;color:white;font-size:18px;font-weight:bold;";
+  closeBtn.addEventListener("click", closeQRScanner);
+
+  qrCameraOverlay.appendChild(title);
+  qrCameraOverlay.appendChild(reader);
+  qrCameraOverlay.appendChild(closeBtn);
+  document.body.appendChild(qrCameraOverlay);
+
+  try {
+    const scanner = new Html5Qrcode("qrLiveReader");
+    liveQrScanner = scanner;
+
+    await scanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: (w, h) => {
+          const size = Math.floor(Math.min(w, h, 280));
+          return { width: size, height: size };
+        },
+        aspectRatio: 1.0
+      },
+      async (decodedText) => {
+        const decoded = String(decodedText || "").trim();
+        if (!decoded || !liveQrScanner) return;
+
+        // 二重読み取りを防いでカメラを停止
+        const completedScanner = liveQrScanner;
+        liveQrScanner = null;
+        try { await completedScanner.stop(); } catch (e) {}
+        try { completedScanner.clear(); } catch (e) {}
+
+        if (qrCameraOverlay) {
+          qrCameraOverlay.remove();
+          qrCameraOverlay = null;
+        }
+        qrStarting = false;
+        cameraBtn.innerText = "📷 QR読み込み";
+
+        // 既存のQR検索処理へ渡す
+        QR_SEARCH = decoded;
+        document.getElementById("supplier").value = "";
+        document.getElementById("jump").value = "";
+        document.getElementById("keyword").value = "";
+        updateProducts();
+        render();
+        window.scrollTo(0, 0);
+      },
+      () => {
+        // QRが映っていない間の解析エラーは通常動作なので表示しない
+      }
+    );
+
+    qrStarting = false;
+    cameraBtn.innerText = "📷 読み取り中（閉じる時は下のボタン）";
+  } catch (err) {
+    console.error("QR camera start error:", err);
+    closeQRScanner();
+    const message = String(err && (err.message || err.name) || err);
+    if (/NotAllowedError|PermissionDeniedError|denied|permission/i.test(message)) {
+      alert("カメラを使用できませんでした。iPhoneの設定で、このWebアプリのカメラ使用を許可してください。");
+    } else if (/NotFoundError|DevicesNotFoundError/i.test(message)) {
+      alert("利用できるカメラが見つかりませんでした。");
+    } else {
+      alert("カメラを起動できませんでした。\n" + message + "\n在庫アプリを閉じて開き直し、もう一度お試しください。");
+    }
   }
-
-  // 別の起動時の結果を誤って受け取らない
-  if (data.token !== qrScannerToken) {
-    return;
-  }
-
-  const decoded = String(data.value || "").trim();
-
-  if (!decoded) {
-    alert("QRコードの内容が空でした。もう一度読み取ってください。");
-    return;
-  }
-
-  // 既存アプリの検索処理へ渡す
-  QR_SEARCH = decoded;
-
-  document.getElementById("cameraBtn").innerText =
-    "📷 QR読み込み";
-
-  document.getElementById("supplier").value = "";
-  document.getElementById("jump").value = "";
-  document.getElementById("keyword").value = "";
-
-  updateProducts();
-  render();
-  window.scrollTo(0, 0);
-
-  qrScannerWindow = null;
-  qrScannerToken = "";
-});
-
+}
 
 // 起動
 load();
