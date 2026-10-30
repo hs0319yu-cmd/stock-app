@@ -978,6 +978,7 @@ let textScanWorker = null;
 let textScanBusy = false;
 let textScanActive = false;
 let textScanLast = "";
+let textScanHistory = [];
 let textScanTimer = null;
 
 async function getTextOcrWorker() {
@@ -1013,6 +1014,23 @@ function closeTextScan() {
   if (btn) btn.textContent = "🔎 商品名ライブスキャン";
 }
 
+function ocrSimilarity(a, b) {
+  const x = normalize(a || "");
+  const y = normalize(b || "");
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  const grams = value => {
+    const out = new Set();
+    if (value.length === 1) out.add(value);
+    for (let i = 0; i < value.length - 1; i++) out.add(value.slice(i, i + 2));
+    return out;
+  };
+  const ax = grams(x), by = grams(y);
+  let same = 0;
+  ax.forEach(v => { if (by.has(v)) same++; });
+  return (2 * same) / (ax.size + by.size);
+}
+
 async function runTextOcr() {
   if (!textScanActive || textScanBusy) return;
   const video = document.getElementById("ocrVideo");
@@ -1021,14 +1039,14 @@ async function runTextOcr() {
 
   textScanBusy = true;
   try {
-    // 画面中央を少し広めに切り出し、拡大して文字の細部を残す
+    // 画面中央を切り出して拡大。反射や背景をできるだけ減らす
     const sourceW = video.videoWidth;
     const sourceH = video.videoHeight;
     const cropW = Math.round(sourceW * 0.90);
     const cropH = Math.round(sourceH * 0.82);
     const cropX = Math.round((sourceW - cropW) / 2);
     const cropY = Math.round((sourceH - cropH) / 2);
-    const scale = Math.min(2, 1800 / cropW);
+    const scale = Math.min(2.2, 2000 / cropW);
     canvas.width = Math.max(1, Math.round(cropW * scale));
     canvas.height = Math.max(1, Math.round(cropH * scale));
 
@@ -1037,42 +1055,99 @@ async function runTextOcr() {
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
 
-    // グレースケール＋コントラスト補正。品番の B/8、Z/2 などの輪郭を残す
+    // まず階調を残した高コントラスト画像を作る
     const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = image.data;
+    const histogram = new Array(256).fill(0);
     for (let i = 0; i < pixels.length; i += 4) {
-      const gray = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
-      const enhanced = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
-      pixels[i] = enhanced;
-      pixels[i + 1] = enhanced;
-      pixels[i + 2] = enhanced;
+      const gray = Math.max(0, Math.min(255,
+        (0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2] - 128) * 1.55 + 128
+      ));
+      pixels[i] = pixels[i + 1] = pixels[i + 2] = gray;
+      histogram[Math.round(gray)]++;
     }
     ctx.putImageData(image, 0, 0);
 
-    const worker = await getTextOcrWorker();
-    const result = await worker.recognize(canvas);
-    const text = String(result.data.text || "")
-      .replace(/[\r\n]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    // 2種類目：自動しきい値（二値化）。ビニールの反射がある場合の補助
+    const total = canvas.width * canvas.height;
+    let sum = 0;
+    for (let i = 0; i < 256; i++) sum += i * histogram[i];
+    let sumB = 0, weightB = 0, maxVariance = -1, threshold = 160;
+    for (let i = 0; i < 256; i++) {
+      weightB += histogram[i];
+      if (!weightB) continue;
+      const weightF = total - weightB;
+      if (!weightF) break;
+      sumB += i * histogram[i];
+      const meanB = sumB / weightB;
+      const meanF = (sum - sumB) / weightF;
+      const variance = weightB * weightF * (meanB - meanF) * (meanB - meanF);
+      if (variance > maxVariance) { maxVariance = variance; threshold = i; }
+    }
 
-    const input = document.getElementById("ocrText");
+    const binaryCanvas = document.createElement("canvas");
+    binaryCanvas.width = canvas.width;
+    binaryCanvas.height = canvas.height;
+    const bctx = binaryCanvas.getContext("2d", { willReadFrequently: true });
+    const binary = bctx.createImageData(canvas.width, canvas.height);
+    for (let i = 0; i < pixels.length; i += 4) {
+      const v = pixels[i] > threshold ? 255 : 0;
+      binary.data[i] = binary.data[i + 1] = binary.data[i + 2] = v;
+      binary.data[i + 3] = 255;
+    }
+    bctx.putImageData(binary, 0, 0);
+
+    const worker = await getTextOcrWorker();
     const status = document.getElementById("ocrStatus");
-    if (text && normalize(text).length >= 2) {
-      input.value = text;
-      if (normalize(text) !== textScanLast) {
-        textScanLast = normalize(text);
-        const keyword = document.getElementById("keyword");
-        keyword.value = text;
-        QR_SEARCH = "";
-        document.getElementById("supplier").value = "";
-        document.getElementById("jump").value = "";
-        updateProducts();
-        render();
-      }
-      status.textContent = "文字を認識しました。ピントを合わせ、品番は近づけて映すと精度が上がります。";
+
+    // 1回目：日本語ラベル全体を複数行として認識
+    await worker.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" });
+    const first = await worker.recognize(canvas);
+
+    // 2回目：反射に強い白黒画像を、文字ブロックとして認識
+    await worker.setParameters({ tessedit_pageseg_mode: "11", preserve_interword_spaces: "1" });
+    const second = await worker.recognize(binaryCanvas);
+
+    const candidates = [first, second].map(result => ({
+      text: String(result.data.text || "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim(),
+      confidence: Number(result.data.confidence) || 0
+    })).filter(item => normalize(item.text).length >= 2);
+
+    if (!candidates.length) {
+      status.textContent = "文字が見つかりません。ラベルを正面から大きく映してください。";
+      return;
+    }
+
+    // 認識信頼度を基本に、短すぎる断片だけを少し不利にする
+    candidates.sort((a, b) =>
+      (b.confidence + Math.min(normalize(b.text).length, 40) * 0.12) -
+      (a.confidence + Math.min(normalize(a.text).length, 40) * 0.12)
+    );
+    const text = candidates[0].text;
+    const input = document.getElementById("ocrText");
+    input.value = text;
+
+    // フレーム間で似た結果が繰り返された場合だけ検索欄へ反映
+    const current = normalize(text);
+    textScanHistory.push(current);
+    if (textScanHistory.length > 3) textScanHistory.shift();
+    const stable = textScanHistory.some((value, index) =>
+      index !== textScanHistory.length - 1 &&
+      ocrSimilarity(value, current) >= 0.72
+    );
+
+    if (stable && current !== textScanLast) {
+      textScanLast = current;
+      const keyword = document.getElementById("keyword");
+      keyword.value = text;
+      QR_SEARCH = "";
+      document.getElementById("supplier").value = "";
+      document.getElementById("jump").value = "";
+      updateProducts();
+      render();
+      status.textContent = "複数回の読み取りで似た結果を確認しました。検索に反映しました。";
     } else {
-      status.textContent = "文字が見つかりません。文字を中央に置き、明るくして少し近づけてください。";
+      status.textContent = "読み取り中… 商品ラベルを固定すると、安定した結果が検索に反映されます。";
     }
   } catch (err) {
     console.error("OCR error:", err);
@@ -1082,7 +1157,6 @@ async function runTextOcr() {
     textScanBusy = false;
   }
 }
-
 async function startTextScan() {
   if (textScanActive) { closeTextScan(); return; }
   if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1135,13 +1209,14 @@ async function startTextScan() {
     await video.play();
     textScanActive = true;
     textScanLast = "";
+    textScanHistory = [];
     btn.textContent = "📷 読み取り中（タップで終了）";
-    // OCRを先に準備してから約2.5秒ごとにライブ認識
+    // OCRを先に準備してから約4秒ごとに2方式でライブ認識
     await getTextOcrWorker();
     if (!textScanActive) return;
     document.getElementById("ocrStatus").textContent = "スキャン中です。商品名や品番を映してください。";
     runTextOcr();
-    textScanTimer = setInterval(runTextOcr, 2500);
+    textScanTimer = setInterval(runTextOcr, 4000);
   } catch (err) {
     console.error("Text scan start error:", err);
     closeTextScan();
