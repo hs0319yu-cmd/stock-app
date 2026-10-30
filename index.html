@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+
+<!-- PWA / iPhone ホーム画面アイコン設定 -->
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="在庫アプリ">
+
+<style>
+
+body{
+font-family:sans-serif;
+background:#f5f5f5;
+}
+
+html{
+  scroll-padding-top: var(--header-h);
+}
+.topbar{
+position:sticky;
+top:0;
+z-index:999;
+background:white;
+padding:10px;
+box-shadow:0 2px 8px rgba(0,0,0,.1);
+}
+
+select{
+  width:100%;
+  height:110px;
+  font-size:42px;
+  font-weight:900;
+  padding:10px 20px;
+  margin-bottom:10px;
+  border-radius:14px;
+  border:3px solid #2563eb;
+  background:#2563eb;
+  color:white;
+}
+
+select option{
+font-size:24px;
+}
+
+input{
+width:100%;
+box-sizing:border-box;
+font-size:22px;
+padding:10px;
+margin-bottom:10px;
+}
+
+.card{
+background:white;
+margin:10px;
+padding:15px;
+border-radius:12px;
+box-shadow:0 2px 8px rgba(0,0,0,.1);
+}
+
+.name{
+  font-size:clamp(28px,5vw,56px);
+  font-weight:900;
+  line-height:1.3;
+  word-break:break-word;
+}
+
+.size{
+  font-size:46px;
+  font-weight:bold;
+  color:#7c3aed;
+  margin-top:10px;
+  line-height:1.4;
+}
+
+.stock{
+font-size:64px;
+font-weight:bold;
+text-align:center;
+margin:15px 0;
+}
+
+.qty{
+  width:100%;
+  height:100px;
+  font-size:64px;
+  font-weight:bold;
+  text-align:center;
+  margin-bottom:12px;
+
+  background:#ffffff;      /* 中身を真っ白 */
+  color:#000;              /* 文字を濃い黒 */
+
+  border:2px solid #000000; /* 枠を濃く太く */
+  border-radius:14px;
+
+  outline:none;
+}
+
+#topBtn{
+position:fixed;
+right:20px;
+bottom:20px;
+width:110px;
+height:110px;
+border:none;
+border-radius:50%;
+font-size:40px;
+font-weight:bold;
+background:#2563eb;
+color:white;
+box-shadow:0 4px 12px rgba(0,0,0,.3);
+z-index:9999;
+}
+
+#topBtn:active{
+transform:scale(.95);
+}
+#keyword{
+  width:100%;
+  height:100px;
+  font-size:64px;
+  font-weight:bold;
+  padding:0 20px;
+  box-sizing:border-box;
+  border-radius:14px;
+  border:3px solid #2563eb;
+  margin-bottom:10px;
+}
+
+.btns{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:8px;
+}
+
+.btns button{
+height:100px;
+font-size:48px;
+font-weight:bold;
+border-radius:12px;
+}
+
+.plus{
+  background:#10b981;
+  color:white;
+}
+
+.minus{
+  background:#ef4444;
+  color:white;
+}
+.type{
+ font-size:64px;
+font-weight:900;
+  color:#7c3aed;
+}
+
+.size{
+  font-size:64px;
+font-weight:900;
+  color:#ff0000;
+}
+#cameraBtn{
+  width:100%;
+  height:100px;
+  font-size:48px;
+  font-weight:bold;
+  background:#f59e0b;
+  color:white;
+  border:none;
+  border-radius:14px;
+  margin-bottom:10px;
+}
+#textScanBtn{
+  width:100%;height:100px;font-size:42px;font-weight:bold;
+  background:#0f766e;color:white;border:0;border-radius:14px;margin-bottom:10px;
+}
+#ocrCameraOverlay video{width:100%;max-height:48vh;object-fit:contain;background:#000;border-radius:12px;}
+#ocrCameraOverlay button{min-height:48px;border:0;border-radius:10px;font-size:17px;font-weight:bold;padding:10px 16px;}
+#ocrStatus{color:white;font-size:14px;text-align:center;min-height:24px;}
+#ocrText{width:100%;box-sizing:border-box;min-height:76px;font-size:18px;padding:10px;border-radius:8px;border:2px solid #0f766e;}
+#reader{
+display:none;
+
+position:fixed;
+top:200px;
+
+left:50%;
+transform:translateX(-50%);
+
+width:300px;
+height:300px;
+
+z-index:9999;
+background:black;
+}
+
+#reader video{
+width:300px !important;
+height:300px !important;
+object-fit:cover !important;
+}
+
+/* iPhone文字勝手拡大防止 */
+html{
+-webkit-text-size-adjust:100%;
+}
+/* =====================
+スマホだけ元サイズへ戻す
+===================== */
+@media screen and (max-width:768px){
+
+html{
+  -webkit-text-size-adjust:none;
+}
+
+body{
+  overflow-x:hidden;
+}
+
+.topbar{
+  padding:6px;
+}
+
+/* 上部 */
+select,
+#cameraBtn,
+#textScanBtn,
+#keyword{
+  height:48px !important;
+  font-size:16px !important;
+  margin-bottom:6px;
+  border-radius:8px;
+}
+
+#keyword{
+  padding:0 10px;
+}
+
+/* 商品カード */
+.card{
+  margin:6px;
+  padding:10px;
+  border-radius:10px;
+}
+
+/* 商品名 */
+.name{
+  font-size:28px !important;
+  font-weight:900;
+  line-height:1.3 !important;
+  margin-bottom:6px;
+}
+
+/* 色・種類 */
+.type{
+ font-size:24px !important;
+  font-weight:900;
+  line-height:1.2;
+}
+
+/* サイズ */
+.size{
+  font-size:30px !important;
+  font-weight:900;
+  margin-top:2px;
+  line-height:1.2;
+}
+
+/* 在庫 */
+.stock{
+  font-size:40px !important;
+  font-weight:900 !important;
+
+  margin:8px 0;
+
+  line-height:1.1;
+}
+
+/* 数量 */
+.qty{
+  height:44px !important;   /* 今の高さ維持 */
+  font-size:34px !important; /* 数字だけ大きく */
+  font-weight:900 !important;
+
+  padding:0 10px !important;
+
+  margin-bottom:8px;
+}
+
+/* ± */
+.btns{
+  gap:6px;
+}
+
+.btns button{
+  height:40px !important;
+  font-size:22px !important;
+}
+
+/* ↑ */
+#topBtn{
+  width:42px !important;
+  height:42px !important;
+  right:8px;
+  bottom:8px;
+  font-size:18px !important;
+}
+
+}
+body{
+  margin:0;
+}
+
+#list{
+  margin-top:0;
+}
+
+.topbar{
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  z-index:999;
+  background:white;
+}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+</head>
+
+<body>
+
+<div class="topbar">
+
+ 
+
+<select id="supplier"
+onfocus="clearKeywordSearch()"
+onchange="
+clearKeywordSearch();
+clearQR();
+updateProducts();
+render();
+">
+<option value="">全商品検索</option>
+</select>
+
+<select id="jump"
+onfocus="clearKeywordSearch()"
+onchange="
+clearKeywordSearch();
+render();
+">
+<option value="">商品</option>
+</select>
+    
+    
+<button
+id="cameraBtn"
+onclick="
+clearKeywordSearch();
+scanQR();
+">
+📷 QR読み込み
+</button>
+
+<button
+id="textScanBtn"
+type="button"
+onclick="startTextScan()">
+🔎 商品名ライブスキャン
+</button>
+
+<input
+id="qrFile"
+type="file"
+accept="image/*"
+capture="environment"
+style="display:none;">
+
+ <input
+type="text"
+id="keyword"
+placeholder="キーワード検索"
+oninput="searchRender()"
+onfocus="
+QR_SEARCH='';
+document.getElementById('cameraBtn').innerText='📷 QR読み込み';
+
+document.getElementById('supplier').value='';
+document.getElementById('jump').value='';
+
+updateProducts();
+render();
+
+zoomOn();
+"
+onblur="zoomOff()">
+
+</div>
+
+<div id="reader"></div>
+<div id="list"></div>
+
+
+<button id="topBtn" onclick="goTop()">↑</button>
+
+<script>
+
+let DATA = [];
+
+let LAST_Y = 0;
+
+// ←ここに置く
+function restoreScroll(){
+  window.scrollTo(0, LAST_Y);
+}
+
+function onFocusQty(row){
+  LAST_Y = window.scrollY;
+}
+
+ const GAS_URL =
+"https://script.google.com/macros/s/AKfycbwYBYPrPt6_-F6KJ0fBAl5mfRWzzvEi976jYX4-16Bw3NSbhtOVkgnTy__vqVPrdE8g/exec";
+
+// QRで呼び出した検索文字列
+let QR_SEARCH = "";
+
+// QR解除
+function clearQR(){
+
+QR_SEARCH = "";
+
+document.getElementById(
+"cameraBtn"
+).innerText =
+"📷 QR読み込み";
+
+}
+
+// ★ここに全部まとめる（最上部）
+function normalize(str){
+  return String(str || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .replace(/[ぁ-ん]/g, s =>
+      String.fromCharCode(s.charCodeAt(0) + 0x60)
+    );
+}
+
+function tokenize(str){
+  return normalize(str).match(/[\p{L}\p{N}]+/gu) || [];
+}
+
+function score(itemText, keyword){
+
+  const text = normalize(itemText);
+  const key = normalize(keyword);
+
+  let score = 0;
+
+  if (!key) return 1;
+
+  // ① 完全一致
+  if (text.includes(key)) {
+    return 100;
+  }
+
+  // ② スライド部分一致（Amazonの核心）
+  for (let i = 0; i < key.length - 1; i++) {
+
+    const part = key.slice(i, i + 2); // 2文字単位
+
+    if (text.includes(part)) {
+      score += 10;
+    }
+  }
+
+  // ③ 1文字でもヒット
+  for (let c of key) {
+    if (text.includes(c)) {
+      score += 2;
+    }
+  }
+
+  return score;
+}
+// =====================
+// 商品select更新
+// =====================
+function updateProducts(){
+
+const supplier =
+document.getElementById(
+"supplier"
+).value;
+
+// 商品一覧生成
+const names =
+[
+...new Set(
+
+DATA
+.filter(item=>
+
+!supplier ||
+
+item.supplier === supplier
+
+)
+.map(item=>
+
+item.name
+
+)
+.filter(Boolean)
+
+)
+];
+
+document.getElementById(
+"jump"
+).innerHTML =
+
+'<option value="">商品</option>' +
+
+names
+.map(v=>
+
+`<option value="${v}">
+${v}
+</option>`
+
+)
+.join("");
+
+}
+
+function adjustHeader(){
+
+  const topbar =
+    document.querySelector(".topbar");
+
+  const h =
+    topbar.getBoundingClientRect().height;
+
+  document.getElementById("list")
+    .style.marginTop =
+      (h + 25) + "px";
+}
+window.addEventListener(
+  "load",
+  adjustHeader
+);
+
+window.addEventListener(
+  "resize",
+  adjustHeader
+);
+// =====================
+// データ取得
+// =====================
+async function load(){
+
+const res =
+await fetch(
+GAS_URL + "?api=1"
+);
+
+DATA =
+await res.json();
+
+/* 仕入先一覧 */
+const supplierEl =
+document.getElementById(
+"supplier"
+);
+
+supplierEl.innerHTML =
+
+'<option value="">全商品検索</option>' +
+
+[
+...new Set(
+DATA
+.map(v=>v.supplier)
+.filter(Boolean)
+)
+]
+.map(v=>
+
+`<option value="${v}">
+${v}
+</option>`
+
+)
+.join("");
+
+/* 商品一覧更新 */
+updateProducts();
+
+/* 初回表示 */
+render();
+
+/* ★ヘッダー高さ調整 */
+setTimeout(adjustHeader,100);
+
+}
+// =====================
+// 描画
+// =====================
+function render(){
+
+  const supplier = document.getElementById("supplier").value;
+  const product  = document.getElementById("jump").value;
+  const keyword  = document.getElementById("keyword").value;
+
+  let list = [];
+
+  DATA.forEach(item => {
+
+    if (supplier && item.supplier !== supplier) return;
+    if (product && item.name !== product) return;
+
+    
+// QR表示中なら
+// supplier|name|type 一致
+if(QR_SEARCH){
+
+const qr =
+normalize(QR_SEARCH);
+
+const target =
+normalize(
+(item.supplier || "") +
+"|" +
+(item.name || "") +
+"|" +
+(item.type || "")
+);
+
+console.log(
+"QR=",
+qr
+);
+
+console.log(
+"TARGET=",
+target
+);
+
+if(
+target !== qr
+){
+return;
+}
+
+}
+
+
+   const text = normalize(
+  item.supplier +
+  item.name +
+  item.type +
+  item.size +
+  item.code
+);
+
+    const s = keyword ? score(text, keyword) : 1;
+
+    if (keyword && s === 0) return;
+
+    list.push({ item, score: s });
+  });
+
+  // ★重要：スコア順（Amazonの本体）
+  list.sort((a,b) => b.score - a.score);
+
+  let html = "";
+
+  list.forEach(obj => {
+
+    const item = obj.item;
+
+  html += `
+  <div class="card" id="item_${item.row}">
+
+    <div class="name">${item.name}</div>
+
+    <div class="type">${item.type || ""}</div>
+
+    <div class="size">${item.size || ""}</div>
+
+   <div class="stock" id="s${item.row}">
+  0
+</div>
+
+  <input
+type="tel"
+id="q${item.row}"
+class="qty"
+placeholder="${item.supplier || '仕入先なし'}"
+onfocus="onFocusQty(${item.row})"
+onblur="setTimeout(restoreScroll, 0)">
+
+
+   <div class="btns">
+  <button class="plus" onclick="chg(${item.row},1)">＋</button>
+  <button class="minus" onclick="chg(${item.row},-1)">－</button>
+</div>
+
+  </div>
+`;
+  });
+
+ document.getElementById("list").innerHTML = html;
+
+/* ★ヘッダー高さ再計算 */
+setTimeout(adjustHeader,0);
+}
+
+/* 検索窓のキーワード検索を解除 */
+let searchTimer;
+
+function clearKeywordSearch(){
+  clearTimeout(searchTimer);
+  const keywordEl = document.getElementById("keyword");
+  if (keywordEl) keywordEl.value = "";
+  QR_SEARCH = "";
+  render();
+}
+
+function searchRender(){
+
+  clearTimeout(searchTimer);
+
+  searchTimer = setTimeout(()=>{
+
+    const keyword =
+      document.getElementById("keyword").value.trim();
+
+    // ★検索開始したら「全体検索に戻す」
+    if(keyword){
+
+      document.getElementById("supplier").value = "";
+      document.getElementById("jump").value = "";
+
+      updateProducts();
+    }
+
+    render();
+    window.scrollTo(0,0);
+
+  },100);
+
+}
+
+// =====================
+// 在庫変更
+// =====================
+async function chg(row,mode){
+
+  const box = document.getElementById("q"+row);
+  const qty = Number(box.value);
+
+  if(!qty || qty <= 0) return;
+
+  const diff = mode > 0 ? qty : -qty;
+
+  const stockEl = document.getElementById("s"+row);
+
+  let current = Number(stockEl.innerText) || 0;
+
+  current += diff;
+  if(current < 0) current = 0;
+
+  stockEl.innerText = current;
+
+  box.value = "";
+
+  await fetch(GAS_URL,{
+    method:"POST",
+    body:JSON.stringify({ row, diff })
+  });
+
+  box.blur();
+}
+
+
+// =====================
+// 上へ
+// =====================
+function goTop(){
+
+  window.scrollTo({
+    top:0,
+    behavior:"smooth"
+  });
+
+}
+
+// =====================
+// ズーム制御
+// =====================
+function zoomOn(){
+
+  document
+  .querySelector('meta[name="viewport"]')
+  .setAttribute(
+    "content",
+    "width=device-width,initial-scale=1"
+  );
+
+}
+
+function zoomOff(){
+
+  document
+  .querySelector('meta[name="viewport"]')
+  .setAttribute(
+    "content",
+    "width=device-width,initial-scale=1,maximum-scale=1"
+  );
+
+}
+
+
+/* =====================
+   QR読取：在庫アプリ内でライブスキャン
+   Safari / iPhoneホーム画面アプリ対応
+   ===================== */
+
+let liveQrScanner = null;
+let qrCameraOverlay = null;
+let qrStarting = false;
+
+function closeQRScanner() {
+  if (liveQrScanner) {
+    const scanner = liveQrScanner;
+    liveQrScanner = null;
+    scanner.stop().catch(() => {}).finally(() => {
+      try { scanner.clear(); } catch (e) {}
+    });
+  }
+  if (qrCameraOverlay) {
+    qrCameraOverlay.remove();
+    qrCameraOverlay = null;
+  }
+  qrStarting = false;
+  const cameraBtn = document.getElementById("cameraBtn");
+  if (cameraBtn) cameraBtn.innerText = "📷 QR読み込み";
+}
+
+async function scanQR() {
+  const cameraBtn = document.getElementById("cameraBtn");
+
+  if (qrStarting || liveQrScanner) return;
+  if (typeof Html5Qrcode === "undefined") {
+    alert("QR読み取りライブラリを読み込めませんでした。通信状態を確認して、もう一度お試しください。");
+    return;
+  }
+
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("この画面ではカメラを起動できません。https:// で開いていることを確認してください。");
+    return;
+  }
+
+  qrStarting = true;
+  cameraBtn.innerText = "📷 カメラ起動中…";
+
+  // ポップアップや別タブを使わず、現在の在庫アプリ内にカメラ画面を表示
+  qrCameraOverlay = document.createElement("div");
+  qrCameraOverlay.id = "qrCameraOverlay";
+  qrCameraOverlay.style.cssText =
+    "position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.94);" +
+    "display:flex;flex-direction:column;align-items:center;justify-content:center;" +
+    "padding:18px;box-sizing:border-box;";
+
+  const title = document.createElement("div");
+  title.textContent = "QRコードを枠内に映してください";
+  title.style.cssText =
+    "color:white;font-size:18px;font-weight:bold;text-align:center;margin:0 0 14px;";
+
+  const reader = document.createElement("div");
+  reader.id = "qrLiveReader";
+  reader.style.cssText =
+    "width:min(92vw,420px);min-height:260px;background:#111;border-radius:12px;overflow:hidden;";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.textContent = "閉じる";
+  closeBtn.style.cssText =
+    "margin-top:18px;min-height:48px;width:min(92vw,420px);border:0;border-radius:10px;" +
+    "background:#ef4444;color:white;font-size:18px;font-weight:bold;";
+  closeBtn.addEventListener("click", closeQRScanner);
+
+  qrCameraOverlay.appendChild(title);
+  qrCameraOverlay.appendChild(reader);
+  qrCameraOverlay.appendChild(closeBtn);
+  document.body.appendChild(qrCameraOverlay);
+
+  try {
+    const scanner = new Html5Qrcode("qrLiveReader");
+    liveQrScanner = scanner;
+
+    await scanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: (w, h) => {
+          const size = Math.floor(Math.min(w, h, 280));
+          return { width: size, height: size };
+        },
+        aspectRatio: 1.0
+      },
+      async (decodedText) => {
+        const decoded = String(decodedText || "").trim();
+        if (!decoded || !liveQrScanner) return;
+
+        // 二重読み取りを防いでカメラを停止
+        const completedScanner = liveQrScanner;
+        liveQrScanner = null;
+        try { await completedScanner.stop(); } catch (e) {}
+        try { completedScanner.clear(); } catch (e) {}
+
+        if (qrCameraOverlay) {
+          qrCameraOverlay.remove();
+          qrCameraOverlay = null;
+        }
+        qrStarting = false;
+        cameraBtn.innerText = "📷 QR読み込み";
+
+        // 既存のQR検索処理へ渡す
+        QR_SEARCH = decoded;
+        document.getElementById("supplier").value = "";
+        document.getElementById("jump").value = "";
+        document.getElementById("keyword").value = "";
+        updateProducts();
+        render();
+        window.scrollTo(0, 0);
+      },
+      () => {
+        // QRが映っていない間の解析エラーは通常動作なので表示しない
+      }
+    );
+
+    qrStarting = false;
+    cameraBtn.innerText = "📷 読み取り中（閉じる時は下のボタン）";
+  } catch (err) {
+    console.error("QR camera start error:", err);
+    closeQRScanner();
+    const message = String(err && (err.message || err.name) || err);
+    if (/NotAllowedError|PermissionDeniedError|denied|permission/i.test(message)) {
+      alert("カメラを使用できませんでした。iPhoneの設定で、このWebアプリのカメラ使用を許可してください。");
+    } else if (/NotFoundError|DevicesNotFoundError/i.test(message)) {
+      alert("利用できるカメラが見つかりませんでした。");
+    } else {
+      alert("カメラを起動できませんでした。\n" + message + "\n在庫アプリを閉じて開き直し、もう一度お試しください。");
+    }
+  }
+}
+
+// =====================
+// 商品名ライブスキャン（無料OCR）
+// QRスキャンとは独立して動作。OCR結果を既存キーワード検索へ渡す。
+// =====================
+let textScanStream = null;
+let textScanWorker = null;
+let textScanBusy = false;
+let textScanActive = false;
+let textScanLast = "";
+let textScanTimer = null;
+
+async function getTextOcrWorker() {
+  if (textScanWorker) return textScanWorker;
+  if (!window.Tesseract) throw new Error("文字認識ライブラリを読み込めませんでした。通信状態を確認してください。");
+  const status = document.getElementById("ocrStatus");
+  status.textContent = "日本語の文字認識データを準備しています（初回のみ時間がかかります）…";
+  textScanWorker = await Tesseract.createWorker("jpn+eng", 1, {
+    logger: m => {
+      if (m.status === "recognizing text") status.textContent = `文字を認識中… ${Math.round((m.progress || 0) * 100)}%`;
+      else if (m.status) status.textContent = "準備中：" + m.status;
+    }
+  });
+  // 商品ラベル内の複数行テキストを読みやすくする設定
+  await textScanWorker.setParameters({
+    tessedit_pageseg_mode: "6",
+    preserve_interword_spaces: "1"
+  });
+  return textScanWorker;
+}
+
+function closeTextScan() {
+  textScanActive = false;
+  textScanBusy = false;
+  if (textScanTimer) { clearInterval(textScanTimer); textScanTimer = null; }
+  if (textScanStream) {
+    textScanStream.getTracks().forEach(track => track.stop());
+    textScanStream = null;
+  }
+  const overlay = document.getElementById("ocrCameraOverlay");
+  if (overlay) overlay.remove();
+  const btn = document.getElementById("textScanBtn");
+  if (btn) btn.textContent = "🔎 商品名ライブスキャン";
+}
+
+async function runTextOcr() {
+  if (!textScanActive || textScanBusy) return;
+  const video = document.getElementById("ocrVideo");
+  const canvas = document.getElementById("ocrCanvas");
+  if (!video || !canvas || video.readyState < 2 || !video.videoWidth) return;
+
+  textScanBusy = true;
+  try {
+    // 画面中央を少し広めに切り出し、拡大して文字の細部を残す
+    const sourceW = video.videoWidth;
+    const sourceH = video.videoHeight;
+    const cropW = Math.round(sourceW * 0.90);
+    const cropH = Math.round(sourceH * 0.82);
+    const cropX = Math.round((sourceW - cropW) / 2);
+    const cropY = Math.round((sourceH - cropH) / 2);
+    const scale = Math.min(2, 1800 / cropW);
+    canvas.width = Math.max(1, Math.round(cropW * scale));
+    canvas.height = Math.max(1, Math.round(cropH * scale));
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+
+    // グレースケール＋コントラスト補正。品番の B/8、Z/2 などの輪郭を残す
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const pixels = image.data;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const gray = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
+      const enhanced = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
+      pixels[i] = enhanced;
+      pixels[i + 1] = enhanced;
+      pixels[i + 2] = enhanced;
+    }
+    ctx.putImageData(image, 0, 0);
+
+    const worker = await getTextOcrWorker();
+    const result = await worker.recognize(canvas);
+    const text = String(result.data.text || "")
+      .replace(/[\r\n]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const input = document.getElementById("ocrText");
+    const status = document.getElementById("ocrStatus");
+    if (text && normalize(text).length >= 2) {
+      input.value = text;
+      if (normalize(text) !== textScanLast) {
+        textScanLast = normalize(text);
+        const keyword = document.getElementById("keyword");
+        keyword.value = text;
+        QR_SEARCH = "";
+        document.getElementById("supplier").value = "";
+        document.getElementById("jump").value = "";
+        updateProducts();
+        render();
+      }
+      status.textContent = "文字を認識しました。ピントを合わせ、品番は近づけて映すと精度が上がります。";
+    } else {
+      status.textContent = "文字が見つかりません。文字を中央に置き、明るくして少し近づけてください。";
+    }
+  } catch (err) {
+    console.error("OCR error:", err);
+    const status = document.getElementById("ocrStatus");
+    if (status) status.textContent = "文字認識でエラーが発生しました。明るさや通信状態を確認してください。";
+  } finally {
+    textScanBusy = false;
+  }
+}
+
+async function startTextScan() {
+  if (textScanActive) { closeTextScan(); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("カメラを起動できません。https:// で在庫アプリを開いてください。");
+    return;
+  }
+  if (typeof Tesseract === "undefined") {
+    alert("文字認識ライブラリを読み込めませんでした。通信状態を確認してください。");
+    return;
+  }
+  const btn = document.getElementById("textScanBtn");
+  btn.textContent = "📷 カメラ起動中…";
+  const overlay = document.createElement("div");
+  overlay.id = "ocrCameraOverlay";
+  overlay.style.cssText = "position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.96);display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:flex-start;padding:18px;box-sizing:border-box;overflow:auto;";
+  overlay.innerHTML = `
+    <div style="color:white;font-size:20px;font-weight:bold;text-align:center;">緑の枠内に商品名・品番・サイズを大きく映してください</div>
+    <div style="position:relative;width:100%;max-width:520px;">
+      <video id="ocrVideo" autoplay playsinline muted></video>
+      <div style="position:absolute;left:5%;top:9%;width:90%;height:82%;border:2px solid #34d399;border-radius:10px;box-sizing:border-box;pointer-events:none;"></div>
+    </div>
+    <canvas id="ocrCanvas" style="display:none"></canvas>
+    <div id="ocrStatus">カメラを準備しています…</div>
+    <div style="width:100%;max-width:520px;color:white;font-size:14px;">読み取った文字（必要なら修正できます）</div>
+    <textarea id="ocrText" placeholder="認識した文字がここに表示されます"></textarea>
+    <div style="display:flex;gap:10px;width:100%;max-width:520px;">
+      <button id="ocrApplyBtn" style="flex:1;background:#2563eb;color:white;">この文字で検索</button>
+      <button id="ocrCloseBtn" style="flex:1;background:#dc2626;color:white;">カメラを閉じる</button>
+    </div>
+    <div style="color:#d1d5db;font-size:12px;text-align:center;">読み取り結果は既存の商品DBから検索します。商品候補はカメラを閉じた後も画面に残ります。</div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById("ocrCloseBtn").addEventListener("click", closeTextScan);
+  document.getElementById("ocrApplyBtn").addEventListener("click", () => {
+    const text = document.getElementById("ocrText").value.trim();
+    if (!text) { alert("検索する文字を読み取るか入力してください。"); return; }
+    document.getElementById("keyword").value = text;
+    QR_SEARCH = "";
+    document.getElementById("supplier").value = "";
+    document.getElementById("jump").value = "";
+    updateProducts();
+    render();
+    closeTextScan();
+    window.scrollTo(0, 0);
+  });
+  try {
+    textScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+    const video = document.getElementById("ocrVideo");
+    video.srcObject = textScanStream;
+    await video.play();
+    textScanActive = true;
+    textScanLast = "";
+    btn.textContent = "📷 読み取り中（タップで終了）";
+    // OCRを先に準備してから約2.5秒ごとにライブ認識
+    await getTextOcrWorker();
+    if (!textScanActive) return;
+    document.getElementById("ocrStatus").textContent = "スキャン中です。商品名や品番を映してください。";
+    runTextOcr();
+    textScanTimer = setInterval(runTextOcr, 2500);
+  } catch (err) {
+    console.error("Text scan start error:", err);
+    closeTextScan();
+    const msg = String(err && (err.message || err.name) || err);
+    if (/NotAllowedError|PermissionDeniedError|denied|permission/i.test(msg)) {
+      alert("カメラを使用できません。iPhoneの設定でカメラを許可してください。");
+    } else {
+      alert("商品スキャンを起動できませんでした。\n" + msg);
+    }
+  }
+}
+
+// 起動
+load();
+
+
+</script>
+
+</body>
+</html>
