@@ -188,6 +188,7 @@ font-weight:900;
 #ocrStatus{color:white;font-size:14px;text-align:center;min-height:24px;}
 #ocrText{width:100%;box-sizing:border-box;min-height:76px;font-size:18px;padding:10px;border-radius:8px;border:2px solid #0f766e;}
 #ocrAiBtn{background:#7c3aed;color:white;}
+#ocrCaptureBtn{background:#0f766e;color:white;width:100%;}
 #reader{
 display:none;
 
@@ -374,11 +375,10 @@ scanQR();
 📷 QR読み込み
 </button>
 
-<button
-id="textScanBtn"
+<button id="textScanBtn"
 type="button"
 onclick="startTextScan()">
-🔎 商品名ライブスキャン
+📷 商品写真を撮影してAI検索
 </button>
 
 <input
@@ -1019,7 +1019,7 @@ function closeTextScan() {
   const overlay = document.getElementById("ocrCameraOverlay");
   if (overlay) overlay.remove();
   const btn = document.getElementById("textScanBtn");
-  if (btn) btn.textContent = "🔎 商品名ライブスキャン";
+  if (btn) btn.textContent = "📷 商品写真を撮影してAI検索";
 }
 
 function ocrSimilarity(a, b) {
@@ -1297,12 +1297,13 @@ async function startTextScan() {
   overlay.id = "ocrCameraOverlay";
   overlay.style.cssText = "position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.96);display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:flex-start;padding:18px;box-sizing:border-box;overflow:auto;";
   overlay.innerHTML = `
-    <div style="color:white;font-size:20px;font-weight:bold;text-align:center;">緑の枠内に商品名・品番・サイズを大きく映してください</div>
+    <div style="color:white;font-size:20px;font-weight:bold;text-align:center;">商品ラベルを枠内に入れて撮影してください</div>
     <div style="position:relative;width:100%;max-width:520px;">
       <video id="ocrVideo" autoplay playsinline muted></video>
       <div style="position:absolute;left:5%;top:9%;width:90%;height:82%;border:2px solid #34d399;border-radius:10px;box-sizing:border-box;pointer-events:none;"></div>
     </div>
     <canvas id="ocrCanvas" style="display:none"></canvas>
+    <button id="ocrCaptureBtn">この写真をAIで読み取る</button>
     <div id="ocrStatus">カメラを準備しています…</div>
     <div style="width:100%;max-width:520px;color:white;font-size:14px;">読み取った文字（必要なら修正できます）</div>
     <textarea id="ocrText" placeholder="認識した文字がここに表示されます"></textarea>
@@ -1316,6 +1317,21 @@ async function startTextScan() {
   document.body.appendChild(overlay);
   document.getElementById("ocrCloseBtn").addEventListener("click", closeTextScan);
   document.getElementById("ocrAiBtn").addEventListener("click", enhanceOcrWithAi);
+  document.getElementById("ocrCaptureBtn").addEventListener("click", async () => {
+    // 撮影するたびにAIを最初に実行する。連続スキャンは行わない。
+    const captureButton = document.getElementById("ocrCaptureBtn");
+    if (textScanBusy) return;
+    captureButton.disabled = true;
+    captureButton.textContent = "写真をAIで解析中…";
+    aiOcrFirstFrameDone = false;
+    textScanHistory = [];
+    try {
+      await runTextOcr();
+    } finally {
+      captureButton.disabled = false;
+      captureButton.textContent = "この写真をAIで読み取る";
+    }
+  });
   document.getElementById("ocrApplyBtn").addEventListener("click", () => {
     const text = document.getElementById("ocrText").value.trim();
     if (!text) { alert("検索する文字を読み取るか入力してください。"); return; }
@@ -1337,13 +1353,8 @@ async function startTextScan() {
     textScanLast = "";
     textScanHistory = [];
     aiOcrFirstFrameDone = false;
-    btn.textContent = "📷 読み取り中（タップで終了）";
-    // OCRを先に準備してから約4秒ごとに2方式でライブ認識
-    await getTextOcrWorker();
-    if (!textScanActive) return;
-    document.getElementById("ocrStatus").textContent = "スキャン中です。商品名や品番を映してください。";
-    runTextOcr();
-    textScanTimer = setInterval(runTextOcr, 4000);
+    btn.textContent = "📷 商品写真を撮影中（タップで終了）";
+    document.getElementById("ocrStatus").textContent = "ラベルを合わせて「この写真をAIで読み取る」を押してください。";
   } catch (err) {
     console.error("Text scan start error:", err);
     closeTextScan();
