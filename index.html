@@ -1097,36 +1097,65 @@ async function runTextOcr() {
     }
     bctx.putImageData(binary, 0, 0);
 
+    // ラベル中央部分を別に切り出す。商品名の大きな文字を優先して読む
+    const labelCanvas = document.createElement("canvas");
+    const labelX = Math.round(canvas.width * 0.08);
+    const labelY = Math.round(canvas.height * 0.12);
+    const labelW = Math.round(canvas.width * 0.84);
+    const labelH = Math.round(canvas.height * 0.66);
+    labelCanvas.width = labelW;
+    labelCanvas.height = labelH;
+    const labelCtx = labelCanvas.getContext("2d");
+    labelCtx.imageSmoothingEnabled = true;
+    labelCtx.imageSmoothingQuality = "high";
+    labelCtx.drawImage(canvas, labelX, labelY, labelW, labelH, 0, 0, labelW, labelH);
+
     const worker = await getTextOcrWorker();
     const status = document.getElementById("ocrStatus");
+    const candidates = [];
 
-    // 1回目：日本語ラベル全体を複数行として認識
+    // 3パターンで読み、文字のまとまりが良い結果を選ぶ
     await worker.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" });
-    const first = await worker.recognize(canvas);
+    const fullResult = await worker.recognize(canvas);
+    candidates.push({ result: fullResult, mode: "全体" });
 
-    // 2回目：反射に強い白黒画像を、文字ブロックとして認識
     await worker.setParameters({ tessedit_pageseg_mode: "11", preserve_interword_spaces: "1" });
-    const second = await worker.recognize(binaryCanvas);
+    const binaryResult = await worker.recognize(binaryCanvas);
+    candidates.push({ result: binaryResult, mode: "白黒" });
 
-    const candidates = [first, second].map(result => ({
-      text: String(result.data.text || "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim(),
-      confidence: Number(result.data.confidence) || 0
-    })).filter(item => normalize(item.text).length >= 2);
+    await worker.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" });
+    const labelResult = await worker.recognize(labelCanvas);
+    candidates.push({ result: labelResult, mode: "商品ラベル拡大" });
 
-    if (!candidates.length) {
+    const evaluated = candidates.map(candidate => {
+      const data = candidate.result.data || {};
+      const text = String(data.text || "")
+        .replace(/[\r\n]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const compact = normalize(text);
+      const japaneseCount = (text.match(/[ぁ-んァ-ヶ一-龠]/g) || []).length;
+      const codeLikeCount = (text.match(/[A-Z]{1,5}[-ー]?\d{1,5}/gi) || []).length;
+      const garbageCount = (text.match(/[|*_＝=<>←→]/g) || []).length;
+      const confidence = Number(data.confidence) || 0;
+      const quality = confidence
+        + Math.min(japaneseCount, 16) * 1.8
+        + Math.min(codeLikeCount, 3) * 2
+        - garbageCount * 2.5
+        - (compact.length < 3 ? 12 : 0);
+      return { text, confidence, quality, mode: candidate.mode };
+    }).filter(item => normalize(item.text).length >= 2);
+
+    if (!evaluated.length) {
       status.textContent = "文字が見つかりません。ラベルを正面から大きく映してください。";
       return;
     }
 
-    // 認識信頼度を基本に、短すぎる断片だけを少し不利にする
-    candidates.sort((a, b) =>
-      (b.confidence + Math.min(normalize(b.text).length, 40) * 0.12) -
-      (a.confidence + Math.min(normalize(a.text).length, 40) * 0.12)
-    );
-    const text = candidates[0].text;
+    evaluated.sort((a, b) => b.quality - a.quality);
+    const text = evaluated[0].text;
     const input = document.getElementById("ocrText");
     input.value = text;
-
+    status.textContent = evaluated[0].mode + "の読み取り結果を確認中…";
     // フレーム間で似た結果が繰り返された場合だけ検索欄へ反映
     const current = normalize(text);
     textScanHistory.push(current);
@@ -1147,7 +1176,7 @@ async function runTextOcr() {
       render();
       status.textContent = "複数回の読み取りで似た結果を確認しました。検索に反映しました。";
     } else {
-      status.textContent = "読み取り中… 商品ラベルを固定すると、安定した結果が検索に反映されます。";
+      status.textContent = "商品ラベル拡大を含む3方式で認識中… ラベルを固定してください。";
     }
   } catch (err) {
     console.error("OCR error:", err);
