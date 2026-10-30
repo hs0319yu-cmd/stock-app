@@ -187,6 +187,7 @@ font-weight:900;
 #ocrCameraOverlay button{min-height:48px;border:0;border-radius:10px;font-size:17px;font-weight:bold;padding:10px 16px;}
 #ocrStatus{color:white;font-size:14px;text-align:center;min-height:24px;}
 #ocrText{width:100%;box-sizing:border-box;min-height:76px;font-size:18px;padding:10px;border-radius:8px;border:2px solid #0f766e;}
+#ocrAiBtn{background:#7c3aed;color:white;}
 #reader{
 display:none;
 
@@ -431,6 +432,10 @@ function onFocusQty(row){
 
  const GAS_URL =
 "https://script.google.com/macros/s/AKfycbwYBYPrPt6_-F6KJ0fBAl5mfRWzzvEi976jYX4-16Bw3NSbhtOVkgnTy__vqVPrdE8g/exec";
+
+// GitHub PagesからManusのAIを直接呼ばず、既存GASを安全な中継先として使う。
+// GAS側で api=ai-ocr を実装していない場合は、従来のTesseract OCRへ戻る。
+const AI_OCR_URL = GAS_URL + "?api=ai-ocr";
 
 // QRで呼び出した検索文字列
 let QR_SEARCH = "";
@@ -980,6 +985,8 @@ let textScanActive = false;
 let textScanLast = "";
 let textScanHistory = [];
 let textScanTimer = null;
+let lastOcrImageDataUrl = "";
+let aiOcrBusy = false;
 
 async function getTextOcrWorker() {
   if (textScanWorker) return textScanWorker;
@@ -1031,6 +1038,65 @@ function ocrSimilarity(a, b) {
   return (2 * same) / (ax.size + by.size);
 }
 
+function getOcrProductCandidates(text) {
+  const query = normalize(text);
+  return DATA
+    .map(item => {
+      const label = [item.supplier, item.name, item.type, item.size, item.code]
+        .filter(Boolean).join(" ");
+      return { item, score: score(label, text) };
+    })
+    .filter(x => x.score > 0 || !query)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20)
+    .map(x => ({
+      supplier: x.item.supplier || "",
+      name: x.item.name || "",
+      type: x.item.type || "",
+      size: x.item.size || "",
+      code: x.item.code || ""
+    }));
+}
+
+async function enhanceOcrWithAi() {
+  if (aiOcrBusy) return;
+  const input = document.getElementById("ocrText");
+  const status = document.getElementById("ocrStatus");
+  if (!lastOcrImageDataUrl) {
+    status.textContent = "先にカメラで商品ラベルを読み取ってください。";
+    return;
+  }
+  aiOcrBusy = true;
+  const button = document.getElementById("ocrAiBtn");
+  if (button) { button.disabled = true; button.textContent = "AIで確認中…"; }
+  status.textContent = "Manus AIで画像と商品DBを照合しています…";
+  try {
+    const response = await fetch(AI_OCR_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        image: lastOcrImageDataUrl,
+        ocrText: input.value.trim(),
+        candidates: getOcrProductCandidates(input.value.trim())
+      })
+    });
+    if (!response.ok) throw new Error("AI-OCR中継サーバー HTTP " + response.status);
+    const result = await response.json();
+    const corrected = String(result.correctedText || result.text || "").trim();
+    if (!corrected) throw new Error("AIから認識結果が返りませんでした");
+    input.value = corrected;
+    status.textContent = result.matchedName
+      ? "AI確認済み：" + result.matchedName
+      : "AIで読み取り結果を補正しました。内容を確認してください。";
+  } catch (error) {
+    console.warn("AI OCR unavailable:", error);
+    status.textContent = "AI確認を利用できません。従来OCRの結果を使用します。";
+  } finally {
+    aiOcrBusy = false;
+    if (button) { button.disabled = false; button.textContent = "AIで精度を上げる"; }
+  }
+}
+
 async function runTextOcr() {
   if (!textScanActive || textScanBusy) return;
   const video = document.getElementById("ocrVideo");
@@ -1054,6 +1120,8 @@ async function runTextOcr() {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+    // AI-OCRボタンで送る最新フレーム。認証情報はブラウザへ置かない。
+    lastOcrImageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
 
     // まず階調を残した高コントラスト画像を作る
     const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -1213,12 +1281,14 @@ async function startTextScan() {
     <textarea id="ocrText" placeholder="認識した文字がここに表示されます"></textarea>
     <div style="display:flex;gap:10px;width:100%;max-width:520px;">
       <button id="ocrApplyBtn" style="flex:1;background:#2563eb;color:white;">この文字で検索</button>
+      <button id="ocrAiBtn" style="flex:1;">AIで精度を上げる</button>
       <button id="ocrCloseBtn" style="flex:1;background:#dc2626;color:white;">カメラを閉じる</button>
     </div>
     <div style="color:#d1d5db;font-size:12px;text-align:center;">読み取り結果は既存の商品DBから検索します。商品候補はカメラを閉じた後も画面に残ります。</div>
   `;
   document.body.appendChild(overlay);
   document.getElementById("ocrCloseBtn").addEventListener("click", closeTextScan);
+  document.getElementById("ocrAiBtn").addEventListener("click", enhanceOcrWithAi);
   document.getElementById("ocrApplyBtn").addEventListener("click", () => {
     const text = document.getElementById("ocrText").value.trim();
     if (!text) { alert("検索する文字を読み取るか入力してください。"); return; }
