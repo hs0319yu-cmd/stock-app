@@ -388,6 +388,13 @@ accept="image/*"
 capture="environment"
 style="display:none;">
 
+<input
+id="textPhotoFile"
+type="file"
+accept="image/*"
+capture="environment"
+style="display:none;">
+
  <input
 type="text"
 id="keyword"
@@ -1281,60 +1288,112 @@ async function runTextOcr() {
     textScanBusy = false;
   }
 }
-async function startTextScan() {
-  if (textScanActive) { closeTextScan(); return; }
-  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    alert("カメラを起動できません。https:// で在庫アプリを開いてください。");
+
+let photoSelection = null;
+let photoSelectionStart = null;
+
+function drawPhotoSelection(x, y) {
+  const box = document.getElementById("ocrPhotoSelection");
+  if (!box || !photoSelectionStart) return;
+  const left = Math.min(photoSelectionStart.x, x);
+  const top = Math.min(photoSelectionStart.y, y);
+  const width = Math.abs(x - photoSelectionStart.x);
+  const height = Math.abs(y - photoSelectionStart.y);
+  box.style.left = left + "px";
+  box.style.top = top + "px";
+  box.style.width = width + "px";
+  box.style.height = height + "px";
+  photoSelection = { left, top, width, height };
+}
+
+async function recognizeSelectedPhoto() {
+  if (!photoSelection || photoSelection.width < 12 || photoSelection.height < 12) {
+    alert("文字が入る範囲を指で囲んでください。");
     return;
   }
-  if (typeof Tesseract === "undefined") {
-    alert("文字認識ライブラリを読み込めませんでした。通信状態を確認してください。");
-    return;
+  const image = document.getElementById("ocrPhoto");
+  const status = document.getElementById("ocrStatus");
+  const button = document.getElementById("ocrExtractBtn");
+  const rect = image.getBoundingClientRect();
+  const scaleX = image.naturalWidth / rect.width;
+  const scaleY = image.naturalHeight / rect.height;
+  const sx = Math.max(0, photoSelection.left * scaleX);
+  const sy = Math.max(0, photoSelection.top * scaleY);
+  const sw = Math.min(image.naturalWidth - sx, photoSelection.width * scaleX);
+  const sh = Math.min(image.naturalHeight - sy, photoSelection.height * scaleY);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(sw));
+  canvas.height = Math.max(1, Math.round(sh));
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  lastOcrImageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+  button.disabled = true;
+  button.textContent = "AIで文字抽出中…";
+  status.textContent = "選択範囲をAIで読み取っています…";
+  try {
+    const result = await requestAiOcr(lastOcrImageDataUrl, "");
+    applyOcrResult(result, status);
+  } catch (aiError) {
+    // AI中継が未設定でも、選択範囲だけをTesseractで読む。
+    console.warn("Selected photo AI OCR unavailable; fallback to Tesseract:", aiError);
+    try {
+      const worker = await getTextOcrWorker();
+      const result = await worker.recognize(canvas);
+      const text = String(result.data && result.data.text || "").replace(/\s+/g, " ").trim();
+      if (!text) throw new Error("文字が見つかりません");
+      document.getElementById("ocrText").value = text;
+      status.textContent = "選択範囲をOCRで読み取りました。内容を確認してください。";
+    } catch (fallbackError) {
+      console.error("Selected photo OCR error:", fallbackError);
+      status.textContent = "文字を読み取れませんでした。文字を大きく囲んで再試行してください。";
+    }
+  } finally {
+    button.disabled = false;
+    button.textContent = "選択範囲をAIで文字抽出";
   }
-  const btn = document.getElementById("textScanBtn");
-  btn.textContent = "📷 カメラ起動中…";
-  const overlay = document.createElement("div");
-  overlay.id = "ocrCameraOverlay";
-  overlay.style.cssText = "position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.96);display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:flex-start;padding:18px;box-sizing:border-box;overflow:auto;";
+}
+
+function showPhotoSelection(dataUrl) {
+  const overlay = document.getElementById("ocrCameraOverlay");
   overlay.innerHTML = `
-    <div style="color:white;font-size:20px;font-weight:bold;text-align:center;">商品ラベルを枠内に入れて撮影してください</div>
-    <div style="position:relative;width:100%;max-width:520px;">
-      <video id="ocrVideo" autoplay playsinline muted></video>
-      <div style="position:absolute;left:5%;top:9%;width:90%;height:82%;border:2px solid #34d399;border-radius:10px;box-sizing:border-box;pointer-events:none;"></div>
+    <div style="color:white;font-size:19px;font-weight:bold;text-align:center;">文字を指で囲んでください</div>
+    <div id="ocrPhotoStage" style="position:relative;width:100%;max-width:520px;touch-action:none;user-select:none;">
+      <img id="ocrPhoto" src="${dataUrl}" alt="撮影した商品写真" style="display:block;width:100%;max-height:62vh;object-fit:contain;background:#111;border-radius:10px;">
+      <div id="ocrPhotoSelection" style="position:absolute;display:none;border:3px solid #34d399;background:rgba(52,211,153,.18);pointer-events:none;box-sizing:border-box;"></div>
     </div>
-    <canvas id="ocrCanvas" style="display:none"></canvas>
-    <button id="ocrCaptureBtn">この写真をAIで読み取る</button>
-    <div id="ocrStatus">カメラを準備しています…</div>
-    <div style="width:100%;max-width:520px;color:white;font-size:14px;">読み取った文字（必要なら修正できます）</div>
-    <textarea id="ocrText" placeholder="認識した文字がここに表示されます"></textarea>
+    <div id="ocrStatus">写真の上で、商品名・品番などを指でなぞって囲んでください。</div>
+    <button id="ocrExtractBtn" style="background:#0f766e;color:white;width:100%;max-width:520px;min-height:52px;border:0;border-radius:10px;font-size:18px;font-weight:bold;">選択範囲をAIで文字抽出</button>
+    <div style="width:100%;max-width:520px;color:white;font-size:14px;">抽出結果（必要なら修正できます）</div>
+    <textarea id="ocrText" placeholder="選択した文字がここに表示されます"></textarea>
     <div style="display:flex;gap:10px;width:100%;max-width:520px;">
       <button id="ocrApplyBtn" style="flex:1;background:#2563eb;color:white;">この文字で検索</button>
-      <button id="ocrAiBtn" style="flex:1;">AIで精度を上げる</button>
-      <button id="ocrCloseBtn" style="flex:1;background:#dc2626;color:white;">カメラを閉じる</button>
-    </div>
-    <div style="color:#d1d5db;font-size:12px;text-align:center;">読み取り結果は既存の商品DBから検索します。商品候補はカメラを閉じた後も画面に残ります。</div>
-  `;
-  document.body.appendChild(overlay);
-  document.getElementById("ocrCloseBtn").addEventListener("click", closeTextScan);
-  document.getElementById("ocrAiBtn").addEventListener("click", enhanceOcrWithAi);
-  document.getElementById("ocrCaptureBtn").addEventListener("click", async () => {
-    // 撮影するたびにAIを最初に実行する。連続スキャンは行わない。
-    const captureButton = document.getElementById("ocrCaptureBtn");
-    if (textScanBusy) return;
-    captureButton.disabled = true;
-    captureButton.textContent = "写真をAIで解析中…";
-    aiOcrFirstFrameDone = false;
-    textScanHistory = [];
-    try {
-      await runTextOcr();
-    } finally {
-      captureButton.disabled = false;
-      captureButton.textContent = "この写真をAIで読み取る";
-    }
+      <button id="ocrCloseBtn" style="flex:1;background:#dc2626;color:white;">閉じる</button>
+    </div>`;
+  const stage = document.getElementById("ocrPhotoStage");
+  const selectionBox = document.getElementById("ocrPhotoSelection");
+  const point = event => {
+    const r = stage.getBoundingClientRect();
+    return { x: Math.max(0, Math.min(r.width, event.clientX - r.left)), y: Math.max(0, Math.min(r.height, event.clientY - r.top)) };
+  };
+  stage.addEventListener("pointerdown", event => {
+    stage.setPointerCapture(event.pointerId);
+    photoSelectionStart = point(event);
+    selectionBox.style.display = "block";
+    drawPhotoSelection(photoSelectionStart.x, photoSelectionStart.y);
   });
+  stage.addEventListener("pointermove", event => {
+    if (photoSelectionStart) { const p = point(event); drawPhotoSelection(p.x, p.y); }
+  });
+  stage.addEventListener("pointerup", event => {
+    if (photoSelectionStart) { const p = point(event); drawPhotoSelection(p.x, p.y); photoSelectionStart = null; }
+  });
+  document.getElementById("ocrExtractBtn").addEventListener("click", recognizeSelectedPhoto);
+  document.getElementById("ocrCloseBtn").addEventListener("click", closeTextScan);
   document.getElementById("ocrApplyBtn").addEventListener("click", () => {
     const text = document.getElementById("ocrText").value.trim();
-    if (!text) { alert("検索する文字を読み取るか入力してください。"); return; }
+    if (!text) { alert("先に文字を抽出してください。"); return; }
     document.getElementById("keyword").value = text;
     QR_SEARCH = "";
     document.getElementById("supplier").value = "";
@@ -1344,27 +1403,31 @@ async function startTextScan() {
     closeTextScan();
     window.scrollTo(0, 0);
   });
-  try {
-    textScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-    const video = document.getElementById("ocrVideo");
-    video.srcObject = textScanStream;
-    await video.play();
-    textScanActive = true;
-    textScanLast = "";
-    textScanHistory = [];
-    aiOcrFirstFrameDone = false;
-    btn.textContent = "📷 商品写真を撮影中（タップで終了）";
-    document.getElementById("ocrStatus").textContent = "ラベルを合わせて「この写真をAIで読み取る」を押してください。";
-  } catch (err) {
-    console.error("Text scan start error:", err);
-    closeTextScan();
-    const msg = String(err && (err.message || err.name) || err);
-    if (/NotAllowedError|PermissionDeniedError|denied|permission/i.test(msg)) {
-      alert("カメラを使用できません。iPhoneの設定でカメラを許可してください。");
-    } else {
-      alert("商品スキャンを起動できませんでした。\n" + msg);
-    }
-  }
+}
+
+async function startTextScan() {
+  if (textScanActive) { closeTextScan(); return; }
+  const btn = document.getElementById("textScanBtn");
+  const overlay = document.createElement("div");
+  overlay.id = "ocrCameraOverlay";
+  overlay.style.cssText = "position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.96);display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:flex-start;padding:18px;box-sizing:border-box;overflow:auto;";
+  overlay.innerHTML = `
+    <div style="color:white;font-size:20px;font-weight:bold;text-align:center;">写真を撮影して、文字を指で囲んでください</div>
+    <div id="ocrStatus">iPhoneのカメラを起動しています…</div>
+  `;
+  document.body.appendChild(overlay);
+  textScanActive = true;
+  btn.textContent = "📷 写真選択中（タップで終了）";
+  const fileInput = document.getElementById("textPhotoFile");
+  fileInput.value = "";
+  fileInput.onchange = () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => showPhotoSelection(String(reader.result));
+    reader.readAsDataURL(file);
+  };
+  fileInput.click();
 }
 
 // 起動
