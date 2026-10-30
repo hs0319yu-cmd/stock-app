@@ -179,6 +179,14 @@ font-weight:900;
   border-radius:14px;
   margin-bottom:10px;
 }
+#textScanBtn{
+  width:100%;height:100px;font-size:42px;font-weight:bold;
+  background:#0f766e;color:white;border:0;border-radius:14px;margin-bottom:10px;
+}
+#ocrCameraOverlay video{width:100%;max-height:48vh;object-fit:contain;background:#000;border-radius:12px;}
+#ocrCameraOverlay button{min-height:48px;border:0;border-radius:10px;font-size:17px;font-weight:bold;padding:10px 16px;}
+#ocrStatus{color:white;font-size:14px;text-align:center;min-height:24px;}
+#ocrText{width:100%;box-sizing:border-box;min-height:76px;font-size:18px;padding:10px;border-radius:8px;border:2px solid #0f766e;}
 #reader{
 display:none;
 
@@ -225,6 +233,7 @@ body{
 /* 上部 */
 select,
 #cameraBtn,
+#textScanBtn,
 #keyword{
   height:48px !important;
   font-size:16px !important;
@@ -325,6 +334,7 @@ body{
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 </head>
 
 <body>
@@ -948,6 +958,156 @@ async function scanQR() {
       alert("利用できるカメラが見つかりませんでした。");
     } else {
       alert("カメラを起動できませんでした。\n" + message + "\n在庫アプリを閉じて開き直し、もう一度お試しください。");
+    }
+  }
+}
+
+// =====================
+// 商品名ライブスキャン（無料OCR）
+// QRスキャンとは独立して動作。OCR結果を既存キーワード検索へ渡す。
+// =====================
+let textScanStream = null;
+let textScanWorker = null;
+let textScanBusy = false;
+let textScanActive = false;
+let textScanLast = "";
+let textScanTimer = null;
+
+async function getTextOcrWorker() {
+  if (textScanWorker) return textScanWorker;
+  if (!window.Tesseract) throw new Error("文字認識ライブラリを読み込めませんでした。通信状態を確認してください。");
+  const status = document.getElementById("ocrStatus");
+  status.textContent = "日本語の文字認識データを準備しています（初回のみ時間がかかります）…";
+  textScanWorker = await Tesseract.createWorker("jpn+eng", 1, {
+    logger: m => {
+      if (m.status === "recognizing text") status.textContent = `文字を認識中… ${Math.round((m.progress || 0) * 100)}%`;
+      else if (m.status) status.textContent = "準備中：" + m.status;
+    }
+  });
+  return textScanWorker;
+}
+
+function closeTextScan() {
+  textScanActive = false;
+  textScanBusy = false;
+  if (textScanTimer) { clearInterval(textScanTimer); textScanTimer = null; }
+  if (textScanStream) {
+    textScanStream.getTracks().forEach(track => track.stop());
+    textScanStream = null;
+  }
+  const overlay = document.getElementById("ocrCameraOverlay");
+  if (overlay) overlay.remove();
+  const btn = document.getElementById("textScanBtn");
+  if (btn) btn.textContent = "🔎 商品名ライブスキャン";
+}
+
+async function runTextOcr() {
+  if (!textScanActive || textScanBusy) return;
+  const video = document.getElementById("ocrVideo");
+  const canvas = document.getElementById("ocrCanvas");
+  if (!video || !canvas || video.readyState < 2) return;
+  textScanBusy = true;
+  try {
+    const maxWidth = 1280;
+    const scale = Math.min(1, maxWidth / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const worker = await getTextOcrWorker();
+    const result = await worker.recognize(canvas);
+    const text = String(result.data.text || "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+    const input = document.getElementById("ocrText");
+    const status = document.getElementById("ocrStatus");
+    if (text && normalize(text).length >= 2) {
+      input.value = text;
+      if (normalize(text) !== textScanLast) {
+        textScanLast = normalize(text);
+        const keyword = document.getElementById("keyword");
+        keyword.value = text;
+        QR_SEARCH = "";
+        document.getElementById("supplier").value = "";
+        document.getElementById("jump").value = "";
+        updateProducts();
+        render();
+      }
+      status.textContent = "文字を認識しました。商品候補を下に表示しています。";
+    } else {
+      status.textContent = "文字が見つかりません。商品名や品番をカメラに近づけてください。";
+    }
+  } catch (err) {
+    console.error("OCR error:", err);
+    const status = document.getElementById("ocrStatus");
+    if (status) status.textContent = "文字認識でエラーが発生しました。明るさや通信状態を確認してください。";
+  } finally {
+    textScanBusy = false;
+  }
+}
+
+async function startTextScan() {
+  if (textScanActive) { closeTextScan(); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("カメラを起動できません。https:// で在庫アプリを開いてください。");
+    return;
+  }
+  if (typeof Tesseract === "undefined") {
+    alert("文字認識ライブラリを読み込めませんでした。通信状態を確認してください。");
+    return;
+  }
+  const btn = document.getElementById("textScanBtn");
+  btn.textContent = "📷 カメラ起動中…";
+  const overlay = document.createElement("div");
+  overlay.id = "ocrCameraOverlay";
+  overlay.style.cssText = "position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.96);display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:flex-start;padding:18px;box-sizing:border-box;overflow:auto;";
+  overlay.innerHTML = `
+    <div style="color:white;font-size:20px;font-weight:bold;text-align:center;">商品名・品番・サイズを映してください</div>
+    <video id="ocrVideo" autoplay playsinline muted></video>
+    <canvas id="ocrCanvas" style="display:none"></canvas>
+    <div id="ocrStatus">カメラを準備しています…</div>
+    <div style="width:100%;max-width:520px;color:white;font-size:14px;">読み取った文字（必要なら修正できます）</div>
+    <textarea id="ocrText" placeholder="認識した文字がここに表示されます"></textarea>
+    <div style="display:flex;gap:10px;width:100%;max-width:520px;">
+      <button id="ocrApplyBtn" style="flex:1;background:#2563eb;color:white;">この文字で検索</button>
+      <button id="ocrCloseBtn" style="flex:1;background:#dc2626;color:white;">カメラを閉じる</button>
+    </div>
+    <div style="color:#d1d5db;font-size:12px;text-align:center;">読み取り結果は既存の商品DBから検索します。商品候補はカメラを閉じた後も画面に残ります。</div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById("ocrCloseBtn").addEventListener("click", closeTextScan);
+  document.getElementById("ocrApplyBtn").addEventListener("click", () => {
+    const text = document.getElementById("ocrText").value.trim();
+    if (!text) { alert("検索する文字を読み取るか入力してください。"); return; }
+    document.getElementById("keyword").value = text;
+    QR_SEARCH = "";
+    document.getElementById("supplier").value = "";
+    document.getElementById("jump").value = "";
+    updateProducts();
+    render();
+    closeTextScan();
+    window.scrollTo(0, 0);
+  });
+  try {
+    textScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+    const video = document.getElementById("ocrVideo");
+    video.srcObject = textScanStream;
+    await video.play();
+    textScanActive = true;
+    textScanLast = "";
+    btn.textContent = "📷 読み取り中（タップで終了）";
+    // OCRを先に準備してから約2.5秒ごとにライブ認識
+    await getTextOcrWorker();
+    if (!textScanActive) return;
+    document.getElementById("ocrStatus").textContent = "スキャン中です。商品名や品番を映してください。";
+    runTextOcr();
+    textScanTimer = setInterval(runTextOcr, 2500);
+  } catch (err) {
+    console.error("Text scan start error:", err);
+    closeTextScan();
+    const msg = String(err && (err.message || err.name) || err);
+    if (/NotAllowedError|PermissionDeniedError|denied|permission/i.test(msg)) {
+      alert("カメラを使用できません。iPhoneの設定でカメラを許可してください。");
+    } else {
+      alert("商品スキャンを起動できませんでした。\n" + msg);
     }
   }
 }
