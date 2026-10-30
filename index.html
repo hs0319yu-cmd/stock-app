@@ -987,6 +987,7 @@ let textScanHistory = [];
 let textScanTimer = null;
 let lastOcrImageDataUrl = "";
 let aiOcrBusy = false;
+let aiOcrFirstFrameDone = false;
 
 async function getTextOcrWorker() {
   if (textScanWorker) return textScanWorker;
@@ -1058,6 +1059,31 @@ function getOcrProductCandidates(text) {
     }));
 }
 
+async function requestAiOcr(imageDataUrl, ocrText) {
+  const response = await fetch(AI_OCR_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      image: imageDataUrl,
+      ocrText: ocrText || "",
+      candidates: getOcrProductCandidates(ocrText || "")
+    })
+  });
+  if (!response.ok) throw new Error("AI-OCR中継サーバー HTTP " + response.status);
+  const result = await response.json();
+  const corrected = String(result.correctedText || result.text || "").trim();
+  if (!corrected) throw new Error("AIから認識結果が返りませんでした");
+  return { ...result, correctedText: corrected };
+}
+
+function applyOcrResult(result, status) {
+  const input = document.getElementById("ocrText");
+  input.value = result.correctedText;
+  status.textContent = result.matchedName
+    ? "AI確認済み：" + result.matchedName
+    : "AIで読み取り結果を補正しました。内容を確認してください。";
+}
+
 async function enhanceOcrWithAi() {
   if (aiOcrBusy) return;
   const input = document.getElementById("ocrText");
@@ -1071,23 +1097,8 @@ async function enhanceOcrWithAi() {
   if (button) { button.disabled = true; button.textContent = "AIで確認中…"; }
   status.textContent = "Manus AIで画像と商品DBを照合しています…";
   try {
-    const response = await fetch(AI_OCR_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        image: lastOcrImageDataUrl,
-        ocrText: input.value.trim(),
-        candidates: getOcrProductCandidates(input.value.trim())
-      })
-    });
-    if (!response.ok) throw new Error("AI-OCR中継サーバー HTTP " + response.status);
-    const result = await response.json();
-    const corrected = String(result.correctedText || result.text || "").trim();
-    if (!corrected) throw new Error("AIから認識結果が返りませんでした");
-    input.value = corrected;
-    status.textContent = result.matchedName
-      ? "AI確認済み：" + result.matchedName
-      : "AIで読み取り結果を補正しました。内容を確認してください。";
+    const result = await requestAiOcr(lastOcrImageDataUrl, input.value.trim());
+    applyOcrResult(result, status);
   } catch (error) {
     console.warn("AI OCR unavailable:", error);
     status.textContent = "AI確認を利用できません。従来OCRの結果を使用します。";
@@ -1122,6 +1133,22 @@ async function runTextOcr() {
     ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
     // AI-OCRボタンで送る最新フレーム。認証情報はブラウザへ置かない。
     lastOcrImageDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+
+    // 初回フレームはAIを最優先。AI中継が未設定・失敗の場合だけ下のTesseractへ進む。
+    if (!aiOcrFirstFrameDone) {
+      aiOcrFirstFrameDone = true;
+      const aiStatus = document.getElementById("ocrStatus");
+      aiStatus.textContent = "AIで商品画像を確認しています…";
+      try {
+        const aiResult = await requestAiOcr(lastOcrImageDataUrl, "");
+        applyOcrResult(aiResult, aiStatus);
+        textScanBusy = false;
+        return;
+      } catch (aiError) {
+        console.warn("Initial AI OCR unavailable; fallback to Tesseract:", aiError);
+        aiStatus.textContent = "AIに接続できないため、通常OCRへ切り替えています…";
+      }
+    }
 
     // まず階調を残した高コントラスト画像を作る
     const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -1309,6 +1336,7 @@ async function startTextScan() {
     textScanActive = true;
     textScanLast = "";
     textScanHistory = [];
+    aiOcrFirstFrameDone = false;
     btn.textContent = "📷 読み取り中（タップで終了）";
     // OCRを先に準備してから約4秒ごとに2方式でライブ認識
     await getTextOcrWorker();
