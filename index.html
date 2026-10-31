@@ -432,7 +432,7 @@ onblur="zoomOff()">
 
 let DATA = [];
 
-// 端末ごとの入力数量を保存（DBには送信しない）
+// 端末ごとの入力数量を保存し、同時にDBにも更新を送信する
 const LOCAL_QTY_KEY = "stock_app_local_quantities_v1";
 let LOCAL_QTY = {};
 
@@ -466,6 +466,8 @@ function saveLocalQuantities(){
 function getLocalQuantity(row){
   return formatStock(LOCAL_QTY[String(row)] || 0);
 }
+
+const stockWritePending = new Set();
 
 function resetLocalQuantities(){
   if (!confirm("この端末に保存されている全商品の入力数量を0にリセットします。よろしいですか？")) return;
@@ -824,32 +826,63 @@ function searchRender(){
 // =====================
 // 在庫変更
 // =====================
-function chg(row,mode){
+async function chg(row,mode){
   const box = document.getElementById("q"+row);
-  const qty = Number(box && box.value);
+  const qty = Math.floor(Number(box && box.value));
   if(!Number.isFinite(qty) || qty <= 0) {
     alert("数量を入力してください。");
     return;
   }
 
   const rowKey = String(row);
-  const current = getLocalQuantity(row);
-  const next = Math.max(0, current + (mode > 0 ? qty : -qty));
+  // 同じ端末から同じ商品への二重送信を防止
+  if (stockWritePending.has(rowKey)) return;
+  stockWritePending.add(rowKey);
 
-  // この端末内だけで数量を更新。GAS/DBへの通信は行わない。
+  const diff = mode > 0 ? qty : -qty;
+  const previous = getLocalQuantity(row);
+  const next = Math.max(0, previous + diff);
+  const stockEl = document.getElementById("s"+row);
+  const card = document.getElementById("item_"+row);
+  const buttons = card ? card.querySelectorAll(".btns button") : [];
+
+  // 先に端末画面へ反映し、アプリを閉じても残るよう即保存
   LOCAL_QTY[rowKey] = next;
   saveLocalQuantities();
-
-  const item = DATA.find(v => String(v.row) === rowKey);
-  if (item) item.localQty = next;
-
-  const stockEl = document.getElementById("s"+row);
   if (stockEl) {
-    stockEl.innerHTML =
-      '<span class="stock-label">端末入力数</span> ' + next;
+    stockEl.innerHTML = '<span class="stock-label">端末入力数</span> ' + next;
   }
-  box.value = "";
-  box.blur();
+  buttons.forEach(btn => { btn.disabled = true; btn.style.opacity = "0.55"; });
+
+  try {
+    // DBには差分だけ送信。DB全件の再取得はしないため通信負荷を抑える
+    const response = await fetch(GAS_URL, {
+      method: "POST",
+      body: JSON.stringify({ row: Number(row), diff: diff })
+    });
+    const result = await response.json();
+    if (!response.ok || !result || result.ok !== true ||
+        Number(result.row) !== Number(row) ||
+        !Number.isFinite(Number(result.stock))) {
+      throw new Error((result && result.error) || "DBから保存完了の応答がありません");
+    }
+
+    // DB確定値は端末入力数の表示には混ぜず、端末ごとの集計表示を維持
+    box.value = "";
+    box.blur();
+  } catch (err) {
+    console.error("DB在庫更新エラー:", err);
+    // 保存失敗時は端末表示も元に戻し、二重計上を避ける
+    LOCAL_QTY[rowKey] = previous;
+    saveLocalQuantities();
+    if (stockEl) {
+      stockEl.innerHTML = '<span class="stock-label">端末入力数</span> ' + previous;
+    }
+    alert("DBへの保存を確認できませんでした。通信状態とDBの在庫を確認してください。数量は元に戻しました。");
+  } finally {
+    stockWritePending.delete(rowKey);
+    buttons.forEach(btn => { btn.disabled = false; btn.style.opacity = ""; });
+  }
 }
 
 // 上へ
