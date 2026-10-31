@@ -443,6 +443,11 @@ async function refreshStocksFromDB(force = false){
 
     DATA.forEach(item => {
       const key = String(item.row);
+
+      // 更新ボタンを押して通信中の商品は、画面の仮表示を定期同期で戻さない。
+      // force=true（更新処理の完了後）の場合だけDB確定値で上書きする。
+      if (stockUpdatePending.has(key) && !force) return;
+
       if (stockByRow.has(key)) item.stock = stockByRow.get(key);
       const stockEl = document.getElementById("s" + item.row);
       if (stockEl && stockByRow.has(key)) {
@@ -841,11 +846,23 @@ async function chg(row,mode){
   const buttons = card ? card.querySelectorAll(".btns button") : [];
   const stockEl = document.getElementById("s"+row);
 
+  // 画面は先に即時反映。DBの保存処理・同時更新対策は従来どおりサーバー側で行う。
+  const item = DATA.find(v => String(v.row) === rowKey);
+  const previousStock = item ? formatStock(item.stock) : null;
+  const optimisticStock = previousStock === null
+    ? null
+    : Math.max(0, previousStock + diff);
+
+  if (item && optimisticStock !== null) item.stock = optimisticStock;
+  if (stockEl && optimisticStock !== null) {
+    stockEl.innerHTML =
+      '<span class="stock-label">DB在庫</span> ' + optimisticStock;
+  }
+
   buttons.forEach(btn => {
     btn.disabled = true;
     btn.style.opacity = "0.55";
   });
-  // 更新中も現在表示しているDB在庫は消さず、確定値の再取得後にだけ更新
   box.value = "";
 
   try {
@@ -863,8 +880,8 @@ async function chg(row,mode){
     box.blur();
   } catch (err) {
     console.error("在庫更新エラー:", err);
-    alert("在庫更新の通信結果を確認できませんでした。DBの在庫を再取得します。");
-    await refreshStocksFromDB();
+    alert("在庫更新の通信結果を確認できませんでした。DBの確定在庫を再取得します。");
+    await refreshStocksFromDB(true);
   } finally {
     stockUpdatePending.delete(rowKey);
     buttons.forEach(btn => {
