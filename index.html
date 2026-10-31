@@ -86,6 +86,13 @@ font-weight:bold;
 text-align:center;
 margin:15px 0;
 }
+.stock-label{
+  display:inline-block;
+  font-size:.42em;
+  vertical-align:middle;
+  color:#555;
+  margin-right:6px;
+}
 
 .qty{
   width:100%;
@@ -266,14 +273,16 @@ select,
   line-height:1.2;
 }
 
-/* 在庫 */
+/* DB在庫 */
 .stock{
   font-size:40px !important;
   font-weight:900 !important;
-
   margin:8px 0;
-
   line-height:1.1;
+}
+.stock-label{
+  font-size:14px !important;
+  font-weight:bold;
 }
 
 /* 数量 */
@@ -400,6 +409,70 @@ onblur="zoomOff()">
 <script>
 
 let DATA = [];
+
+// DB在庫の自動同期
+let stockRefreshTimer = null;
+let stockRefreshPromise = null;
+const stockUpdatePending = new Set();
+
+function formatStock(value){
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+}
+
+async function refreshStocksFromDB(force = false){
+  // 定期同期中に更新処理が終わった場合は、その取得完了を待ってから再取得
+  if (stockRefreshPromise) {
+    const running = stockRefreshPromise;
+    await running;
+    if (!force) return;
+  }
+
+  const task = (async () => {
+    const res = await fetch(GAS_URL + "?api=1&_ts=" + Date.now(), {
+      cache: "no-store"
+    });
+    if (!res.ok) throw new Error("DB在庫の取得に失敗しました");
+    const latest = await res.json();
+    if (!Array.isArray(latest)) throw new Error("DBのデータ形式が正しくありません");
+
+    // 行番号で照合し、同名商品でも別行の在庫を混同しない
+    const stockByRow = new Map(
+      latest.map(item => [String(item.row), formatStock(item.stock)])
+    );
+
+    DATA.forEach(item => {
+      const key = String(item.row);
+      if (stockByRow.has(key)) item.stock = stockByRow.get(key);
+      const stockEl = document.getElementById("s" + item.row);
+      if (stockEl && stockByRow.has(key)) {
+        stockEl.innerHTML =
+          '<span class="stock-label">DB在庫</span> ' + stockByRow.get(key);
+      }
+    });
+  })();
+
+  stockRefreshPromise = task;
+  try {
+    await task;
+  } catch (err) {
+    console.warn("DB在庫の同期に失敗:", err);
+  } finally {
+    if (stockRefreshPromise === task) stockRefreshPromise = null;
+  }
+}
+
+function startStockAutoRefresh(){
+  if (stockRefreshTimer) clearInterval(stockRefreshTimer);
+  stockRefreshTimer = setInterval(() => {
+    if (!document.hidden) refreshStocksFromDB();
+  }, 3000);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshStocksFromDB();
+});
+window.addEventListener("focus", () => refreshStocksFromDB());
 
 let LAST_Y = 0;
 
@@ -597,6 +670,8 @@ render();
 /* ★ヘッダー高さ調整 */
 setTimeout(adjustHeader,100);
 
+startStockAutoRefresh();
+
 }
 // =====================
 // 描画
@@ -684,7 +759,7 @@ return;
     <div class="size">${item.size || ""}</div>
 
    <div class="stock" id="s${item.row}">
-  0
+  <span class="stock-label">DB在庫</span> ${formatStock(item.stock)}
 </div>
 
   <input
@@ -754,32 +829,52 @@ async function chg(row,mode){
 
   const box = document.getElementById("q"+row);
   const qty = Number(box.value);
-
   if(!qty || qty <= 0) return;
 
-  const diff = mode > 0 ? qty : -qty;
+  // 同じ商品を同じ端末から連打して二重送信しない
+  const rowKey = String(row);
+  if (stockUpdatePending.has(rowKey)) return;
+  stockUpdatePending.add(rowKey);
 
+  const diff = mode > 0 ? qty : -qty;
+  const card = document.getElementById("item_" + row);
+  const buttons = card ? card.querySelectorAll(".btns button") : [];
   const stockEl = document.getElementById("s"+row);
 
-  let current = Number(stockEl.innerText) || 0;
-
-  current += diff;
-  if(current < 0) current = 0;
-
-  stockEl.innerText = current;
-
+  buttons.forEach(btn => {
+    btn.disabled = true;
+    btn.style.opacity = "0.55";
+  });
+  // 更新中も現在表示しているDB在庫は消さず、確定値の再取得後にだけ更新
   box.value = "";
 
-  await fetch(GAS_URL,{
-    method:"POST",
-    body:JSON.stringify({ row, diff })
-  });
+  try {
+    const response = await fetch(GAS_URL,{
+      method:"POST",
+      body:JSON.stringify({ row, diff })
+    });
+    const resultText = await response.text();
+    if (!response.ok || /ERROR/i.test(resultText)) {
+      throw new Error(resultText || "在庫更新に失敗しました");
+    }
 
-  box.blur();
+    // 画面上で足し引きせず、DBの確定値を読み直して表示
+    await refreshStocksFromDB(true);
+    box.blur();
+  } catch (err) {
+    console.error("在庫更新エラー:", err);
+    alert("在庫更新の通信結果を確認できませんでした。DBの在庫を再取得します。");
+    await refreshStocksFromDB();
+  } finally {
+    stockUpdatePending.delete(rowKey);
+    buttons.forEach(btn => {
+      btn.disabled = false;
+      btn.style.opacity = "";
+    });
+  }
 }
 
 
-// =====================
 // 上へ
 // =====================
 function goTop(){
