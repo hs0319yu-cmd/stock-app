@@ -647,6 +647,14 @@ html.is-desktop #topBtn{width:58px;height:58px;right:18px;bottom:18px;font-size:
   html.is-desktop .btns button{height:58px;font-size:30px;cursor:pointer;}
   html.is-desktop #topBtn{width:58px;height:58px;right:18px;bottom:18px;font-size:25px;}
 }
+
+/* スマホ：画面外の商品カードは描画を後回しにして入力操作を軽くする */
+@media (max-width: 599px) {
+  #list .card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 340px;
+  }
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
@@ -1151,10 +1159,10 @@ function searchRender(){
   if (window.keywordComposing) return;
 
   clearTimeout(searchTimer);
-  // 入力が止まってから検索する。入力中の画面停止を防ぐ
+  // 入力が完全に止まってから検索する。低速スマホでの再描画回数を減らす
   searchTimer = setTimeout(() => {
     render(true);
-  }, 550);
+  }, 900);
 }
 
 // =====================
