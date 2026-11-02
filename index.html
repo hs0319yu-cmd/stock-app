@@ -21,6 +21,19 @@
   applyLayout();
   window.addEventListener("resize", applyLayout, {passive:true});
 })();
+
+// service-worker.js の更新を確実に確認する
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./service-worker.js?v=stock-v2", {
+      updateViaCache: "none"
+    }).then(function (registration) {
+      return registration.update();
+    }).catch(function (error) {
+      console.error("Service Worker登録エラー:", error);
+    });
+  });
+}
 </script>
 
 <!-- PWA / iPhone ホーム画面アイコン設定 -->
@@ -690,6 +703,8 @@ type="text"
 id="keyword"
 placeholder="キーワード検索"
 oninput="searchRender()"
+oncompositionstart="window.keywordComposing=true"
+oncompositionend="window.keywordComposing=false;searchRender()"
 onfocus="
 const hadFilter = !!QR_SEARCH ||
   !!document.getElementById('supplier').value ||
@@ -1044,7 +1059,7 @@ setTimeout(adjustHeader,100);
 // =====================
 // 描画
 // =====================
-function render(){
+function render(skipHeaderAdjust = false){
 
   const supplier = document.getElementById("supplier").value;
   const product  = document.getElementById("jump").value;
@@ -1113,12 +1128,15 @@ onblur="setTimeout(restoreScroll, 0)">
 
  document.getElementById("list").innerHTML = html;
 
-/* ★ヘッダー高さ再計算 */
-setTimeout(adjustHeader,0);
+  // 検索中はヘッダーの高さを再計算しない（入力中の負荷を軽減）
+  if (!skipHeaderAdjust) {
+    setTimeout(adjustHeader, 0);
+  }
 }
 
 /* 検索窓のキーワード検索を解除 */
 let searchTimer;
+window.keywordComposing = false;
 
 function clearKeywordSearch(){
   clearTimeout(searchTimer);
@@ -1129,10 +1147,14 @@ function clearKeywordSearch(){
 }
 
 function searchRender(){
+  // 日本語変換中は商品一覧を作り直さない
+  if (window.keywordComposing) return;
+
   clearTimeout(searchTimer);
+  // 入力が止まってから検索する。入力中の画面停止を防ぐ
   searchTimer = setTimeout(() => {
-    render();
-  }, 180);
+    render(true);
+  }, 550);
 }
 
 // =====================
