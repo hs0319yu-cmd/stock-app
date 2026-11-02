@@ -350,6 +350,112 @@ body{
   z-index:999;
   background:white;
 }
+
+/* =====================
+   PC専用レイアウト
+   ===================== */
+@media screen and (min-width:769px){
+  body{
+    background:#eef2f7;
+    overflow-x:hidden;
+  }
+  .topbar{
+    display:grid;
+    grid-template-columns:minmax(180px,1.1fr) minmax(180px,1.1fr) minmax(170px,.9fr) minmax(150px,.8fr) minmax(260px,1.7fr);
+    gap:10px;
+    align-items:center;
+    padding:14px 22px;
+    box-sizing:border-box;
+  }
+  .topbar select,
+  .topbar #cameraBtn,
+  .topbar #resetQtyBtn,
+  .topbar #keyword{
+    width:100%;
+    height:58px;
+    margin:0;
+    box-sizing:border-box;
+    font-size:19px;
+    border-radius:10px;
+  }
+  .topbar select{
+    padding:8px 12px;
+    border-width:2px;
+  }
+  .topbar #cameraBtn{
+    font-size:18px;
+  }
+  .topbar #resetQtyBtn{
+    height:58px;
+    font-size:17px;
+  }
+  .topbar #keyword{
+    padding:0 14px;
+    font-size:20px;
+  }
+  #list{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:14px;
+    max-width:1700px;
+    margin-left:auto;
+    margin-right:auto;
+    padding:0 18px 24px;
+    box-sizing:border-box;
+  }
+  .card{
+    min-width:0;
+    margin:0;
+    padding:18px;
+    border-radius:14px;
+    box-shadow:0 2px 10px rgba(15,23,42,.09);
+  }
+  .name{
+    font-size:clamp(22px,1.65vw,32px);
+    line-height:1.25;
+    min-height:2.5em;
+  }
+  .type{
+    font-size:25px;
+    line-height:1.25;
+  }
+  .size{
+    font-size:30px;
+    margin-top:5px;
+    line-height:1.25;
+  }
+  .stock{
+    font-size:38px;
+    margin:12px 0;
+    padding:8px;
+    background:#f1f5f9;
+    border-radius:10px;
+  }
+  .stock-label{
+    font-size:.42em;
+  }
+  .qty{
+    height:58px;
+    font-size:32px;
+    margin-bottom:10px;
+  }
+  .btns{
+    gap:10px;
+  }
+  .btns button{
+    height:58px;
+    font-size:30px;
+    cursor:pointer;
+  }
+  #topBtn{
+    width:58px;
+    height:58px;
+    right:18px;
+    bottom:18px;
+    font-size:25px;
+  }
+}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
@@ -769,6 +875,7 @@ id="q${item.row}"
 class="qty"
 placeholder="${item.supplier || '仕入先なし'}"
 onfocus="onFocusQty(${item.row})"
+onkeydown="if(event.key==='Enter'){event.preventDefault();chg(${item.row},1)}"
 onblur="setTimeout(restoreScroll, 0)">
 
 
@@ -826,63 +933,82 @@ function searchRender(){
 // =====================
 // 在庫変更
 // =====================
-async function chg(row,mode){
+// 商品ごとのDB更新キュー。画面操作は通信を待たず即時反映する
+const stockWriteQueue = new Map();
+const stockWriteRunning = new Set();
+
+function queueStockWrite(row, diff){
+  const key = String(row);
+  stockWriteQueue.set(key, (stockWriteQueue.get(key) || 0) + diff);
+  if (!stockWriteRunning.has(key)) {
+    flushStockWriteQueue(row);
+  }
+}
+
+async function flushStockWriteQueue(row){
+  const key = String(row);
+  if (stockWriteRunning.has(key)) return;
+  stockWriteRunning.add(key);
+
+  try {
+    while (stockWriteQueue.get(key)) {
+      const diff = stockWriteQueue.get(key);
+      stockWriteQueue.set(key, 0);
+
+      const response = await fetch(GAS_URL, {
+        method:"POST",
+        body:JSON.stringify({ row:Number(row), diff:diff })
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result || result.ok !== true ||
+          Number(result.row) !== Number(row) ||
+          !Number.isFinite(Number(result.stock))) {
+        throw new Error((result && result.error) || "DBから保存完了の応答がありません");
+      }
+    }
+  } catch (err) {
+    console.error("DB在庫更新エラー:", err);
+    // 通信結果が不明な場合は自動再送しない（二重加算防止）
+    stockWriteQueue.set(key, 0);
+    alert("DBへの保存結果を確認できませんでした。通信状態とスプレッドシートの在庫を確認してください。");
+  } finally {
+    stockWriteRunning.delete(key);
+    if (stockWriteQueue.get(key)) flushStockWriteQueue(row);
+  }
+}
+
+function chg(row,mode){
   const box = document.getElementById("q"+row);
-  const qty = Math.floor(Number(box && box.value));
-  if(!Number.isFinite(qty) || qty <= 0) {
-    alert("数量を入力してください。");
+  const rawQty = box ? String(box.value).trim() : "";
+  const qty = Math.floor(Number(rawQty));
+  if(!rawQty || !Number.isFinite(qty) || qty <= 0) {
+    if (box) box.focus();
     return;
   }
 
   const rowKey = String(row);
-  // 同じ端末から同じ商品への二重送信を防止
-  if (stockWritePending.has(rowKey)) return;
-  stockWritePending.add(rowKey);
-
-  const diff = mode > 0 ? qty : -qty;
   const previous = getLocalQuantity(row);
-  const next = Math.max(0, previous + diff);
-  const stockEl = document.getElementById("s"+row);
-  const card = document.getElementById("item_"+row);
-  const buttons = card ? card.querySelectorAll(".btns button") : [];
+  const requestedDiff = mode > 0 ? qty : -qty;
+  const next = Math.max(0, previous + requestedDiff);
+  const actualDiff = next - previous;
 
-  // 先に端末画面へ反映し、アプリを閉じても残るよう即保存
+  // 画面と端末保存を先に完了。DB通信の待ち時間でボタンを止めない
   LOCAL_QTY[rowKey] = next;
   saveLocalQuantities();
+
+  const stockEl = document.getElementById("s"+row);
   if (stockEl) {
     stockEl.innerHTML = '<span class="stock-label">端末入力数</span> ' + next;
   }
-  buttons.forEach(btn => { btn.disabled = true; btn.style.opacity = "0.55"; });
 
-  try {
-    // DBには差分だけ送信。DB全件の再取得はしないため通信負荷を抑える
-    const response = await fetch(GAS_URL, {
-      method: "POST",
-      body: JSON.stringify({ row: Number(row), diff: diff })
-    });
-    const result = await response.json();
-    if (!response.ok || !result || result.ok !== true ||
-        Number(result.row) !== Number(row) ||
-        !Number.isFinite(Number(result.stock))) {
-      throw new Error((result && result.error) || "DBから保存完了の応答がありません");
-    }
-
-    // DB確定値は端末入力数の表示には混ぜず、端末ごとの集計表示を維持
+  if (box) {
     box.value = "";
     box.blur();
-  } catch (err) {
-    console.error("DB在庫更新エラー:", err);
-    // 保存失敗時は端末表示も元に戻し、二重計上を避ける
-    LOCAL_QTY[rowKey] = previous;
-    saveLocalQuantities();
-    if (stockEl) {
-      stockEl.innerHTML = '<span class="stock-label">端末入力数</span> ' + previous;
-    }
-    alert("DBへの保存を確認できませんでした。通信状態とDBの在庫を確認してください。数量は元に戻しました。");
-  } finally {
-    stockWritePending.delete(rowKey);
-    buttons.forEach(btn => { btn.disabled = false; btn.style.opacity = ""; });
   }
+
+  // 実際に変化した数量だけDBへ送信。連打分は商品ごとにまとめて順次送信
+  if (actualDiff !== 0) queueStockWrite(row, actualDiff);
 }
 
 // 上へ
