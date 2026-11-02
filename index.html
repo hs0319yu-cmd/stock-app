@@ -3,6 +3,21 @@
 <head>
 
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>
+/* 初回表示前に端末を判定。PCのホーム画面アプリでも初回からPC用CSSを適用 */
+(function(){
+  var finePointer = window.matchMedia &&
+    window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+  var coarsePointer = window.matchMedia &&
+    window.matchMedia("(pointer:coarse)").matches;
+  var screenWidth = Math.max(
+    (window.screen && window.screen.width) || 0,
+    (window.screen && window.screen.availWidth) || 0
+  );
+  var desktop = screenWidth > 768 && (finePointer || !coarsePointer);
+  document.documentElement.classList.add(desktop ? "is-desktop" : "is-mobile");
+})();
+</script>
 
 <!-- PWA / iPhone ホーム画面アイコン設定 -->
 <link rel="manifest" href="./manifest.json">
@@ -456,6 +471,62 @@ body{
   }
 }
 
+
+/* PCホーム画面アプリの初回表示用。media query判定が遅れてもPC表示を優先 */
+html.is-desktop body{
+  background:#eef2f7;
+  overflow-x:hidden;
+}
+html.is-desktop .topbar{
+  display:grid;
+  grid-template-columns:minmax(180px,1.1fr) minmax(180px,1.1fr) minmax(170px,.9fr) minmax(150px,.8fr) minmax(260px,1.7fr);
+  gap:10px;
+  align-items:center;
+  padding:14px 22px;
+  box-sizing:border-box;
+}
+html.is-desktop .topbar select,
+html.is-desktop .topbar #cameraBtn,
+html.is-desktop .topbar #resetQtyBtn,
+html.is-desktop .topbar #keyword{
+  width:100%;
+  height:58px;
+  margin:0;
+  box-sizing:border-box;
+  font-size:19px;
+  border-radius:10px;
+}
+html.is-desktop .topbar select{padding:8px 12px;border-width:2px;}
+html.is-desktop .topbar #cameraBtn{font-size:18px;}
+html.is-desktop .topbar #resetQtyBtn{height:58px;font-size:17px;}
+html.is-desktop .topbar #keyword{padding:0 14px;font-size:20px;}
+html.is-desktop #list{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  max-width:1700px;
+  margin-left:auto;
+  margin-right:auto;
+  padding:0 18px 24px;
+  box-sizing:border-box;
+}
+html.is-desktop .card{
+  min-width:0;
+  margin:0;
+  padding:18px;
+  border-radius:14px;
+  box-shadow:0 2px 10px rgba(15,23,42,.09);
+}
+html.is-desktop .name{font-size:clamp(22px,1.65vw,32px);line-height:1.25;min-height:2.5em;}
+html.is-desktop .type{font-size:25px;line-height:1.25;}
+html.is-desktop .size{font-size:30px;margin-top:5px;line-height:1.25;}
+html.is-desktop .stock{font-size:38px;margin:12px 0;padding:8px;background:#f1f5f9;border-radius:10px;}
+html.is-desktop .stock-label{font-size:.42em;}
+html.is-desktop .qty{height:58px;font-size:32px;margin-bottom:10px;}
+html.is-desktop .btns{gap:10px;}
+html.is-desktop .btns button{height:58px;font-size:30px;cursor:pointer;}
+html.is-desktop #topBtn{width:58px;height:58px;right:18px;bottom:18px;font-size:25px;}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 </head>
@@ -569,6 +640,27 @@ function saveLocalQuantities(){
   }
 }
 
+// 数量連打中は端末保存をまとめ、入力操作中の負荷を減らす
+let localSaveTimer = null;
+function scheduleLocalQuantitiesSave(){
+  clearTimeout(localSaveTimer);
+  localSaveTimer = setTimeout(() => {
+    localSaveTimer = null;
+    saveLocalQuantities();
+  }, 250);
+}
+function flushLocalQuantitiesSave(){
+  if (localSaveTimer !== null) {
+    clearTimeout(localSaveTimer);
+    localSaveTimer = null;
+    saveLocalQuantities();
+  }
+}
+window.addEventListener("pagehide", flushLocalQuantitiesSave);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushLocalQuantitiesSave();
+});
+
 function getLocalQuantity(row){
   return formatStock(LOCAL_QTY[String(row)] || 0);
 }
@@ -605,14 +697,16 @@ function isMobileKeyboardOpen(){
 function keepQtyInput(row){
   const box = document.getElementById("q" + row);
   if (!box) return;
+
+  // PCは従来どおり連続入力できるようフォーカスを維持
   if (isDesktopInput()) {
-    box.focus({preventScroll:true});
+    if (document.activeElement !== box) box.focus({preventScroll:true});
     box.select();
-  } else if (isMobileKeyboardOpen()) {
-    box.focus({preventScroll:true});
-  } else {
-    box.blur();
+    return;
   }
+
+  // スマホはタップごとのfocus/blurを行わない。
+  // 入力欄にフォーカスが残っていればキーボードもそのまま維持する。
 }
 
 // スマホでキーボードを閉じたら数量欄のフォーカスも解除
@@ -968,12 +1062,20 @@ function searchRender(){
 // 商品ごとのDB更新キュー。画面操作は通信を待たず即時反映する
 const stockWriteQueue = new Map();
 const stockWriteRunning = new Set();
+const stockWriteTimers = new Map();
 
 function queueStockWrite(row, diff){
   const key = String(row);
   stockWriteQueue.set(key, (stockWriteQueue.get(key) || 0) + diff);
+
+  // 同じ商品の連続操作を短時間まとめてからDBへ送信
+  clearTimeout(stockWriteTimers.get(key));
   if (!stockWriteRunning.has(key)) {
-    flushStockWriteQueue(row);
+    const timer = setTimeout(() => {
+      stockWriteTimers.delete(key);
+      flushStockWriteQueue(row);
+    }, 180);
+    stockWriteTimers.set(key, timer);
   }
 }
 
@@ -1006,7 +1108,11 @@ async function flushStockWriteQueue(row){
     alert("DBへの保存結果を確認できませんでした。通信状態とスプレッドシートの在庫を確認してください。");
   } finally {
     stockWriteRunning.delete(key);
-    if (stockWriteQueue.get(key)) flushStockWriteQueue(row);
+    if (stockWriteQueue.get(key)) {
+      clearTimeout(stockWriteTimers.get(key));
+      stockWriteTimers.delete(key);
+      flushStockWriteQueue(row);
+    }
   }
 }
 
@@ -1027,7 +1133,7 @@ function chg(row,mode){
 
   // 画面と端末保存を先に完了。DB通信の待ち時間でボタンを止めない
   LOCAL_QTY[rowKey] = next;
-  saveLocalQuantities();
+  scheduleLocalQuantitiesSave();
 
   const stockEl = document.getElementById("s"+row);
   if (stockEl) {
