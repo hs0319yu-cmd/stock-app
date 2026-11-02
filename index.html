@@ -228,7 +228,7 @@ html{
 /* =====================
 スマホだけ元サイズへ戻す
 ===================== */
-@media screen and (max-width:768px){
+@media screen and (max-width:768px) and (pointer:coarse){
 
 html{
   -webkit-text-size-adjust:none;
@@ -354,7 +354,7 @@ body{
 /* =====================
    PC専用レイアウト
    ===================== */
-@media screen and (min-width:769px){
+@media screen and (hover:hover) and (pointer:fine){
   body{
     background:#eef2f7;
     overflow-x:hidden;
@@ -591,6 +591,38 @@ function restoreScroll(){
 
 function onFocusQty(row){
   LAST_Y = window.scrollY;
+}
+
+function isDesktopInput(){
+  return window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+}
+
+function isMobileKeyboardOpen(){
+  return !isDesktopInput() && window.visualViewport &&
+    window.visualViewport.height < window.innerHeight - 120;
+}
+
+function keepQtyInput(row){
+  const box = document.getElementById("q" + row);
+  if (!box) return;
+  if (isDesktopInput()) {
+    box.focus({preventScroll:true});
+    box.select();
+  } else if (isMobileKeyboardOpen()) {
+    box.focus({preventScroll:true});
+  } else {
+    box.blur();
+  }
+}
+
+// スマホでキーボードを閉じたら数量欄のフォーカスも解除
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", () => {
+    if (isDesktopInput()) return;
+    const active = document.activeElement;
+    if (active && active.classList && active.classList.contains("qty") &&
+        !isMobileKeyboardOpen()) active.blur();
+  });
 }
 
  const GAS_URL =
@@ -875,13 +907,13 @@ id="q${item.row}"
 class="qty"
 placeholder="${item.supplier || '仕入先なし'}"
 onfocus="onFocusQty(${item.row})"
-onkeydown="if(event.key==='Enter'){event.preventDefault();chg(${item.row},1)}"
+onkeydown="if(event.key==='Enter'){event.preventDefault();chg(${item.row},1,true)}"
 onblur="setTimeout(restoreScroll, 0)">
 
 
    <div class="btns">
-  <button class="plus" onclick="chg(${item.row},1)">＋</button>
-  <button class="minus" onclick="chg(${item.row},-1)">－</button>
+  <button class="plus" onpointerdown="if(matchMedia('(pointer:coarse)').matches)event.preventDefault()" onclick="chg(${item.row},1)">＋</button>
+  <button class="minus" onpointerdown="if(matchMedia('(pointer:coarse)').matches)event.preventDefault()" onclick="chg(${item.row},-1)">－</button>
 </div>
 
   </div>
@@ -1004,7 +1036,7 @@ function chg(row,mode){
 
   if (box) {
     box.value = "";
-    box.blur();
+    keepQtyInput(row);
   }
 
   // 実際に変化した数量だけDBへ送信。連打分は商品ごとにまとめて順次送信
