@@ -6,17 +6,15 @@
 <script>
 /* 初回表示前に端末を判定。PCのホーム画面アプリでも初回からPC用CSSを適用 */
 (function(){
-  var ua = navigator.userAgent || "";
-  var mobileUA = /Android|iPhone|iPod|Mobile/i.test(ua);
   var finePointer = window.matchMedia &&
     window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+  var coarsePointer = window.matchMedia &&
+    window.matchMedia("(pointer:coarse)").matches;
   var screenWidth = Math.max(
     (window.screen && window.screen.width) || 0,
     (window.screen && window.screen.availWidth) || 0
   );
-
-  // PCはUAを優先。スマホはスマホ用、iPad等は画面・ポインターで判定
-  var desktop = !mobileUA && (finePointer || screenWidth > 768 || !/iPad/i.test(ua));
+  var desktop = screenWidth > 768 && (finePointer || !coarsePointer);
   document.documentElement.classList.add(desktop ? "is-desktop" : "is-mobile");
 })();
 </script>
@@ -610,23 +608,6 @@ onblur="zoomOff()">
 <script>
 
 let DATA = [];
-let SEARCH_CACHE = new Map();
-
-function buildSearchCache(){
-  SEARCH_CACHE = new Map();
-  DATA.forEach(item => {
-    SEARCH_CACHE.set(item, {
-      searchText: normalize(
-        (item.supplier || "") + (item.name || "") +
-        (item.type || "") + (item.size || "") + (item.code || "")
-      ),
-      qrText: normalize(
-        (item.supplier || "") + "|" +
-        (item.name || "") + "|" + (item.type || "")
-      )
-    });
-  });
-}
 
 // 端末ごとの入力数量を保存し、同時にDBにも更新を送信する
 const LOCAL_QTY_KEY = "stock_app_local_quantities_v1";
@@ -803,20 +784,6 @@ function score(itemText, keyword){
 
   return score;
 }
-
-function scoreNormalized(text, key){
-  if (!key) return 1;
-  if (text.includes(key)) return 100;
-  let result = 0;
-  for (let i = 0; i < key.length - 1; i++) {
-    if (text.includes(key.slice(i, i + 2))) result += 10;
-  }
-  for (const c of key) {
-    if (text.includes(c)) result += 2;
-  }
-  return result;
-}
-
 // =====================
 // 商品select更新
 // =====================
@@ -902,8 +869,6 @@ GAS_URL + "?api=1"
 DATA =
 await res.json();
 
-buildSearchCache();
-
 /* 仕入先一覧 */
 const supplierEl =
 document.getElementById(
@@ -949,8 +914,6 @@ function render(){
   const supplier = document.getElementById("supplier").value;
   const product  = document.getElementById("jump").value;
   const keyword  = document.getElementById("keyword").value;
-  const normalizedKeyword = normalize(keyword);
-  const normalizedQR = QR_SEARCH ? normalize(QR_SEARCH) : "";
 
   let list = [];
 
@@ -960,12 +923,50 @@ function render(){
     if (product && item.name !== product) return;
 
     
-const cached = SEARCH_CACHE.get(item) || { searchText: "", qrText: "" };
+// QR表示中なら
+// supplier|name|type 一致
+if(QR_SEARCH){
 
-    // QR表示中ならキャッシュ済み文字列で照合
-    if (QR_SEARCH && cached.qrText !== normalizedQR) return;
+const qr =
+normalize(QR_SEARCH);
 
-    const s = keyword ? scoreNormalized(cached.searchText, normalizedKeyword) : 1;
+const target =
+normalize(
+(item.supplier || "") +
+"|" +
+(item.name || "") +
+"|" +
+(item.type || "")
+);
+
+console.log(
+"QR=",
+qr
+);
+
+console.log(
+"TARGET=",
+target
+);
+
+if(
+target !== qr
+){
+return;
+}
+
+}
+
+
+   const text = normalize(
+  item.supplier +
+  item.name +
+  item.type +
+  item.size +
+  item.code
+);
+
+    const s = keyword ? score(text, keyword) : 1;
 
     if (keyword && s === 0) return;
 
@@ -1049,8 +1050,9 @@ function searchRender(){
     }
 
     render();
+    window.scrollTo(0,0);
 
-  },180);
+  },100);
 
 }
 
