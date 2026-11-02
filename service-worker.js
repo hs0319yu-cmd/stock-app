@@ -1,69 +1,61 @@
-const CACHE_NAME = "stock-v1";
 
-const urlsToCache = [
-  "./",
-  "./index.html",
-  "./manifest.json"
-];
+const CACHE_NAME = "stock-v2";
 
+self.addEventListener("install", event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll([
+        "./",
+        "./index.html",
+        "./manifest.json"
+      ]))
+      .then(() => self.skipWaiting())
+  );
+});
 
-// インストール
-self.addEventListener(
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(
+        keys
+          .filter(key => key.startsWith("stock-") && key !== CACHE_NAME)
+          .map(key => caches.delete(key))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
 
-  "install",
+self.addEventListener("fetch", event => {
+  const request = event.request;
 
-  event=>{
+  if (request.method !== "GET") return;
 
-    event.waitUntil(
+  const url = new URL(request.url);
+  const isHtml =
+    request.mode === "navigate" ||
+    url.pathname.endsWith("/index.html") ||
+    url.pathname.endsWith("/stock-app/");
 
-      caches.open(CACHE_NAME)
-
-      .then(cache=>{
-
-        return cache.addAll(
-
-          urlsToCache
-
-        );
-
-      })
-
-    );
-
-  }
-
-);
-
-
-// 読み込み
-self.addEventListener(
-
-  "fetch",
-
-  event=>{
-
+  if (isHtml) {
     event.respondWith(
-
-      caches.match(
-
-        event.request
-
-      )
-
-      .then(response=>{
-
-        return (
-
-          response ||
-
-          fetch(event.request)
-
-        );
-
-      })
-
+      fetch(request, { cache: "no-store" })
+        .then(response => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME)
+              .then(cache => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request)
+          .then(response => response || caches.match("./index.html")))
     );
-
+    return;
   }
 
-);
+  event.respondWith(
+    caches.match(request).then(response =>
+      response || fetch(request)
+    )
+  );
+});
