@@ -744,6 +744,15 @@ onblur="zoomOff()">
 
 let DATA = [];
 let SEARCH_CACHE = [];
+
+// スマホは一度に表示する商品カード数を制限して、入力中の負荷を軽減
+const MOBILE_RENDER_STEP = 60;
+let MOBILE_RENDER_COUNT = MOBILE_RENDER_STEP;
+
+function showMoreMobile(){
+  MOBILE_RENDER_COUNT += MOBILE_RENDER_STEP;
+  render(true, true);
+}
 function buildSearchCache(){
   SEARCH_CACHE = DATA.map(item => ({
     item,
@@ -1067,7 +1076,7 @@ setTimeout(adjustHeader,100);
 // =====================
 // 描画
 // =====================
-function render(skipHeaderAdjust = false){
+function render(skipHeaderAdjust = false, preserveMobileCount = false){
 
   const supplier = document.getElementById("supplier").value;
   const product  = document.getElementById("jump").value;
@@ -1075,71 +1084,63 @@ function render(skipHeaderAdjust = false){
   const normalizedKeyword = normalize(keyword);
   const normalizedQR = QR_SEARCH ? normalize(QR_SEARCH) : "";
 
+  if (!preserveMobileCount) MOBILE_RENDER_COUNT = MOBILE_RENDER_STEP;
+
   let list = [];
 
   SEARCH_CACHE.forEach(cached => {
     const item = cached.item;
-
     if (supplier && item.supplier !== supplier) return;
     if (product && item.name !== product) return;
-
-    
     if (QR_SEARCH && cached.qrText !== normalizedQR) return;
 
     const s = keyword ? scoreNormalized(cached.searchText, normalizedKeyword) : 1;
-
     if (keyword && s === 0) return;
-
     list.push({ item, score: s });
   });
 
-  // ★重要：スコア順（Amazonの本体）
   list.sort((a,b) => b.score - a.score);
+
+  // スマホだけ一度に作るカード数を制限。PC・タブレットは全件表示
+  const isSmallScreen = window.matchMedia("(max-width: 599px)").matches;
+  const visibleList = isSmallScreen ? list.slice(0, MOBILE_RENDER_COUNT) : list;
 
   let html = "";
 
-  list.forEach(obj => {
-
+  visibleList.forEach(obj => {
     const item = obj.item;
-
-  html += `
+    html += `
   <div class="card" id="item_${item.row}">
-
     <div class="name">${item.name}</div>
-
     <div class="type">${item.type || ""}</div>
-
     <div class="size">${item.size || ""}</div>
-
-   <div class="stock" id="s${item.row}">
-  <span class="stock-label">端末入力数</span> ${getLocalQuantity(item.row)}
-</div>
-
-  <input
-type="tel"
-id="q${item.row}"
-class="qty"
-placeholder="${item.supplier || '仕入先なし'}"
-onfocus="onFocusQty(${item.row})"
-onkeydown="if(event.key==='Enter'){event.preventDefault();chg(${item.row},1,true)}"
-onblur="setTimeout(restoreScroll, 0)">
-
-
-   <div class="btns">
-  <button class="plus" onpointerdown="if(matchMedia('(pointer:coarse)').matches)event.preventDefault()" onclick="chg(${item.row},1)">＋</button>
-  <button class="minus" onpointerdown="if(matchMedia('(pointer:coarse)').matches)event.preventDefault()" onclick="chg(${item.row},-1)">－</button>
-</div>
-
-  </div>
-`;
+    <div class="stock" id="s${item.row}">
+      <span class="stock-label">端末入力数</span> ${getLocalQuantity(item.row)}
+    </div>
+    <input type="tel" id="q${item.row}" class="qty"
+      placeholder="${item.supplier || '仕入先なし'}"
+      onfocus="onFocusQty(${item.row})"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();chg(${item.row},1,true)}"
+      onblur="setTimeout(restoreScroll, 0)">
+    <div class="btns">
+      <button class="plus" onpointerdown="if(matchMedia('(pointer:coarse)').matches)event.preventDefault()" onclick="chg(${item.row},1)">＋</button>
+      <button class="minus" onpointerdown="if(matchMedia('(pointer:coarse)').matches)event.preventDefault()" onclick="chg(${item.row},-1)">－</button>
+    </div>
+  </div>`;
   });
 
- document.getElementById("list").innerHTML = html;
-
-  // 検索中はヘッダーの高さを再計算しない（入力中の負荷を軽減）
-  if (!skipHeaderAdjust) {
-    setTimeout(adjustHeader, 0);
+  if (isSmallScreen && visibleList.length < list.length) {
+    const remaining = list.length - visibleList.length;
+    html += `
+      <button type="button" onclick="showMoreMobile()"
+        style="display:block;width:calc(100% - 16px);margin:12px 8px 24px;padding:14px;border:0;border-radius:10px;background:#2563eb;color:white;font-size:17px;font-weight:bold;">
+        さらに${Math.min(MOBILE_RENDER_STEP, remaining)}件表示（残り${remaining}件）
+      </button>`;
   }
+
+  document.getElementById("list").innerHTML = html;
+
+  if (!skipHeaderAdjust) setTimeout(adjustHeader, 0);
 }
 
 /* 検索窓のキーワード検索を解除 */
@@ -1159,10 +1160,10 @@ function searchRender(){
   if (window.keywordComposing) return;
 
   clearTimeout(searchTimer);
-  // 入力が完全に止まってから検索する。低速スマホでの再描画回数を減らす
+  // 入力が止まってから検索。スマホはカード数を絞って再描画負荷を抑える
   searchTimer = setTimeout(() => {
     render(true);
-  }, 900);
+  }, 450);
 }
 
 // =====================
