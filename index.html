@@ -6,16 +6,12 @@
 <script>
 /* 初回表示前に端末を判定。PCのホーム画面アプリでも初回からPC用CSSを適用 */
 (function(){
-  var finePointer = window.matchMedia &&
-    window.matchMedia("(hover:hover) and (pointer:fine)").matches;
-  var coarsePointer = window.matchMedia &&
-    window.matchMedia("(pointer:coarse)").matches;
-  var screenWidth = Math.max(
-    (window.screen && window.screen.width) || 0,
-    (window.screen && window.screen.availWidth) || 0
-  );
-  var desktop = screenWidth > 768 && (finePointer || !coarsePointer);
-  document.documentElement.classList.add(desktop ? "is-desktop" : "is-mobile");
+  var ua = navigator.userAgent || "";
+  var platform = navigator.platform || "";
+  var isIPad = /iPad/i.test(ua) ||
+    (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var isMobileDevice = isIPad || /Android|iPhone|iPod|Mobile/i.test(ua);
+  document.documentElement.classList.add(isMobileDevice ? "is-mobile" : "is-desktop");
 })();
 </script>
 
@@ -472,51 +468,28 @@ body{
 }
 
 
-/* PCホーム画面アプリの初回表示用。media query判定が遅れてもPC表示を優先 */
-html.is-desktop body{
-  background:#eef2f7;
-  overflow-x:hidden;
-}
+/* 端末種別クラスでレイアウトを確定 */
+html.is-desktop body{background:#eef2f7;overflow-x:hidden;}
 html.is-desktop .topbar{
-  display:grid;
-  grid-template-columns:minmax(180px,1.1fr) minmax(180px,1.1fr) minmax(170px,.9fr) minmax(150px,.8fr) minmax(260px,1.7fr);
-  gap:10px;
-  align-items:center;
-  padding:14px 22px;
-  box-sizing:border-box;
+ display:grid;
+ grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) minmax(140px,.9fr) minmax(140px,.8fr) minmax(220px,1.5fr);
+ gap:10px;align-items:center;padding:14px 22px;box-sizing:border-box;
 }
 html.is-desktop .topbar select,
 html.is-desktop .topbar #cameraBtn,
 html.is-desktop .topbar #resetQtyBtn,
 html.is-desktop .topbar #keyword{
-  width:100%;
-  height:58px;
-  margin:0;
-  box-sizing:border-box;
-  font-size:19px;
-  border-radius:10px;
+ width:100%;height:58px;margin:0;box-sizing:border-box;font-size:19px;border-radius:10px;
 }
 html.is-desktop .topbar select{padding:8px 12px;border-width:2px;}
 html.is-desktop .topbar #cameraBtn{font-size:18px;}
 html.is-desktop .topbar #resetQtyBtn{height:58px;font-size:17px;}
 html.is-desktop .topbar #keyword{padding:0 14px;font-size:20px;}
 html.is-desktop #list{
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:14px;
-  max-width:1700px;
-  margin-left:auto;
-  margin-right:auto;
-  padding:0 18px 24px;
-  box-sizing:border-box;
+ display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;
+ max-width:1700px;margin-left:auto;margin-right:auto;padding:0 18px 24px;box-sizing:border-box;
 }
-html.is-desktop .card{
-  min-width:0;
-  margin:0;
-  padding:18px;
-  border-radius:14px;
-  box-shadow:0 2px 10px rgba(15,23,42,.09);
-}
+html.is-desktop .card{min-width:0;margin:0;padding:18px;border-radius:14px;box-shadow:0 2px 10px rgba(15,23,42,.09);}
 html.is-desktop .name{font-size:clamp(22px,1.65vw,32px);line-height:1.25;min-height:2.5em;}
 html.is-desktop .type{font-size:25px;line-height:1.25;}
 html.is-desktop .size{font-size:30px;margin-top:5px;line-height:1.25;}
@@ -584,14 +557,19 @@ id="keyword"
 placeholder="キーワード検索"
 oninput="searchRender()"
 onfocus="
+const hadFilter = !!QR_SEARCH ||
+  !!document.getElementById('supplier').value ||
+  !!document.getElementById('jump').value;
 QR_SEARCH='';
 document.getElementById('cameraBtn').innerText='📷 QR読み込み';
 
 document.getElementById('supplier').value='';
 document.getElementById('jump').value='';
 
-updateProducts();
-render();
+if (hadFilter) {
+  updateProducts();
+  render();
+}
 
 zoomOn();
 "
@@ -608,6 +586,16 @@ onblur="zoomOff()">
 <script>
 
 let DATA = [];
+let SEARCH_CACHE = [];
+function buildSearchCache(){
+  SEARCH_CACHE = DATA.map(item => ({
+    item,
+    searchText: normalize((item.supplier || "") + (item.name || "") +
+      (item.type || "") + (item.size || "") + (item.code || "")),
+    qrText: normalize((item.supplier || "") + "|" +
+      (item.name || "") + "|" + (item.type || ""))
+  }));
+}
 
 // 端末ごとの入力数量を保存し、同時にDBにも更新を送信する
 const LOCAL_QTY_KEY = "stock_app_local_quantities_v1";
@@ -686,7 +674,7 @@ function onFocusQty(row){
 }
 
 function isDesktopInput(){
-  return window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+  return document.documentElement.classList.contains("is-desktop");
 }
 
 function isMobileKeyboardOpen(){
@@ -749,6 +737,17 @@ function normalize(str){
 
 function tokenize(str){
   return normalize(str).match(/[\p{L}\p{N}]+/gu) || [];
+}
+
+function scoreNormalized(text, key){
+  if (!key) return 1;
+  if (text.includes(key)) return 100;
+  let points = 0;
+  for (let i = 0; i < key.length - 1; i++) {
+    if (text.includes(key.slice(i, i + 2))) points += 10;
+  }
+  for (const c of key) if (text.includes(c)) points += 2;
+  return points;
 }
 
 function score(itemText, keyword){
@@ -869,6 +868,8 @@ GAS_URL + "?api=1"
 DATA =
 await res.json();
 
+buildSearchCache();
+
 /* 仕入先一覧 */
 const supplierEl =
 document.getElementById(
@@ -914,59 +915,21 @@ function render(){
   const supplier = document.getElementById("supplier").value;
   const product  = document.getElementById("jump").value;
   const keyword  = document.getElementById("keyword").value;
+  const normalizedKeyword = normalize(keyword);
+  const normalizedQR = QR_SEARCH ? normalize(QR_SEARCH) : "";
 
   let list = [];
 
-  DATA.forEach(item => {
+  SEARCH_CACHE.forEach(cached => {
+    const item = cached.item;
 
     if (supplier && item.supplier !== supplier) return;
     if (product && item.name !== product) return;
 
     
-// QR表示中なら
-// supplier|name|type 一致
-if(QR_SEARCH){
+    if (QR_SEARCH && cached.qrText !== normalizedQR) return;
 
-const qr =
-normalize(QR_SEARCH);
-
-const target =
-normalize(
-(item.supplier || "") +
-"|" +
-(item.name || "") +
-"|" +
-(item.type || "")
-);
-
-console.log(
-"QR=",
-qr
-);
-
-console.log(
-"TARGET=",
-target
-);
-
-if(
-target !== qr
-){
-return;
-}
-
-}
-
-
-   const text = normalize(
-  item.supplier +
-  item.name +
-  item.type +
-  item.size +
-  item.code
-);
-
-    const s = keyword ? score(text, keyword) : 1;
+    const s = keyword ? scoreNormalized(cached.searchText, normalizedKeyword) : 1;
 
     if (keyword && s === 0) return;
 
@@ -1032,28 +995,10 @@ function clearKeywordSearch(){
 }
 
 function searchRender(){
-
   clearTimeout(searchTimer);
-
-  searchTimer = setTimeout(()=>{
-
-    const keyword =
-      document.getElementById("keyword").value.trim();
-
-    // ★検索開始したら「全体検索に戻す」
-    if(keyword){
-
-      document.getElementById("supplier").value = "";
-      document.getElementById("jump").value = "";
-
-      updateProducts();
-    }
-
+  searchTimer = setTimeout(() => {
     render();
-    window.scrollTo(0,0);
-
-  },100);
-
+  }, 180);
 }
 
 // =====================
