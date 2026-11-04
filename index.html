@@ -709,6 +709,9 @@ style="display:none;">
  <input
 type="text"
 id="keyword"
+lang="ja"
+autocomplete="off"
+spellcheck="false"
 placeholder="キーワード検索"
 oninput="searchRender()"
 oncompositionstart="window.keywordComposing=true"
@@ -1163,6 +1166,8 @@ function searchRender(){
   // 入力が止まってから検索。スマホはカード数を絞って再描画負荷を抑える
   searchTimer = setTimeout(() => {
     render(true);
+    // 検索結果を表示したら先頭候補が見える位置へ戻す
+    window.scrollTo({ top: 0, behavior: "auto" });
   }, 450);
 }
 
