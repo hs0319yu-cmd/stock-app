@@ -25,7 +25,7 @@
 // service-worker.js の更新を確実に確認する
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {
-    navigator.serviceWorker.register("./service-worker.js?v=stock-v2", {
+    navigator.serviceWorker.register("./service-worker.js?v=stock-v3", {
       updateViaCache: "none"
     }).then(function (registration) {
       return registration.update();
@@ -767,7 +767,7 @@ function buildSearchCache(){
 }
 
 // 端末ごとの入力数量を保存し、同時にDBにも更新を送信する
-const LOCAL_QTY_KEY = "stock_app_local_quantities_v1";
+const LOCAL_QTY_KEY = "stock_app_local_quantities_v2";
 let LOCAL_QTY = {};
 
 function formatStock(value){
@@ -818,9 +818,12 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") flushLocalQuantitiesSave();
 });
 
-function getLocalQuantity(row){
-  return formatStock(LOCAL_QTY[String(row)] || 0);
+function getLocalQuantity(productId){
+  return formatStock(LOCAL_QTY[String(productId)] || 0);
 }
+
+// 商品ID方式へ切り替えたため、旧バージョンの行番号ベース端末集計は引き継がず、
+// 初回起動時は端末入力数を0から開始します（別商品への誤引き継ぎ防止）。
 
 const stockWritePending = new Set();
 
@@ -1029,14 +1032,17 @@ window.addEventListener(
 // =====================
 async function load(){
 
-const res =
-await fetch(
-GAS_URL + "?api=1"
-);
-
-DATA =
-await res.json();
-
+const res = await fetch(GAS_URL + "?api=1", { cache: "no-store" });
+if (!res.ok) throw new Error("商品一覧を取得できませんでした");
+const payload = await res.json();
+if (payload && payload.ok === false) throw new Error(payload.error || "商品一覧の取得に失敗しました");
+DATA = Array.isArray(payload) ? payload : (payload.products || []);
+if (!DATA.length && !Array.isArray(payload) && payload.ok !== true) {
+  throw new Error("商品一覧の形式が正しくありません");
+}
+if (DATA.some(item => !item.id)) {
+  throw new Error("商品IDがない商品があります。GASを最新版に更新して再読み込みしてください");
+}
 buildSearchCache();
 
 /* 仕入先一覧 */
@@ -1118,7 +1124,7 @@ function render(skipHeaderAdjust = false, preserveMobileCount = false){
     <div class="type">${item.type || ""}</div>
     <div class="size">${item.size || ""}</div>
     <div class="stock" id="s${item.row}">
-      <span class="stock-label">端末入力数</span> ${getLocalQuantity(item.row)}
+      <span class="stock-label">端末入力数</span> ${getLocalQuantity(item.id)}
     </div>
     <input type="text" inputmode="numeric" id="q${item.row}" class="qty"
       placeholder="${item.supplier || '仕入先なし'}"
@@ -1172,30 +1178,34 @@ function searchRender(){
 }
 
 // =====================
-// 在庫変更
+// 在庫変更：商品ID単位のキュー
 // =====================
-// 商品ごとのDB更新キュー。画面操作は通信を待たず即時反映する
 const stockWriteQueue = new Map();
 const stockWriteRunning = new Set();
 const stockWriteTimers = new Map();
 
-function queueStockWrite(row, diff){
-  const key = String(row);
-  stockWriteQueue.set(key, (stockWriteQueue.get(key) || 0) + diff);
+function makeRequestId(){
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  return "req-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+}
 
-  // 同じ商品の連続操作を短時間まとめてからDBへ送信
+function queueStockWrite(item, diff){
+  const key = String(item.id);
+  stockWriteQueue.set(key, (stockWriteQueue.get(key) || 0) + diff);
   clearTimeout(stockWriteTimers.get(key));
   if (!stockWriteRunning.has(key)) {
     const timer = setTimeout(() => {
       stockWriteTimers.delete(key);
-      flushStockWriteQueue(row);
+      flushStockWriteQueue(item);
     }, 180);
     stockWriteTimers.set(key, timer);
   }
 }
 
-async function flushStockWriteQueue(row){
-  const key = String(row);
+async function flushStockWriteQueue(item){
+  const key = String(item.id);
   if (stockWriteRunning.has(key)) return;
   stockWriteRunning.add(key);
 
@@ -1203,65 +1213,77 @@ async function flushStockWriteQueue(row){
     while (stockWriteQueue.get(key)) {
       const diff = stockWriteQueue.get(key);
       stockWriteQueue.set(key, 0);
+      const requestId = makeRequestId();
+      const expected = {
+        supplier: item.supplier || "",
+        name: item.name || "",
+        type: item.type || "",
+        size: item.size || "",
+        code: item.code || ""
+      };
 
       const response = await fetch(GAS_URL, {
-        method:"POST",
-        body:JSON.stringify({ row:Number(row), diff:diff })
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ id: item.id, diff, requestId, expected })
       });
       const result = await response.json();
 
       if (!response.ok || !result || result.ok !== true ||
-          Number(result.row) !== Number(row) ||
-          !Number.isFinite(Number(result.stock))) {
-        throw new Error((result && result.error) || "DBから保存完了の応答がありません");
-      }
+    String(result.id) !== key) {
+  throw new Error((result && result.error) || "DBから保存完了の応答がありません");
+}
     }
   } catch (err) {
     console.error("DB在庫更新エラー:", err);
-    // 通信結果が不明な場合は自動再送しない（二重加算防止）
+    // 結果不明時は自動再送しない。二重加算の危険を避ける。
     stockWriteQueue.set(key, 0);
-    alert("DBへの保存結果を確認できませんでした。通信状態とスプレッドシートの在庫を確認してください。");
+    alert("DBへの保存結果を確認できませんでした。自動再送はしていません。通信状態とDB用シートの在庫を確認してください。\n\n" + (err.message || err));
   } finally {
     stockWriteRunning.delete(key);
     if (stockWriteQueue.get(key)) {
       clearTimeout(stockWriteTimers.get(key));
       stockWriteTimers.delete(key);
-      flushStockWriteQueue(row);
+      flushStockWriteQueue(item);
     }
   }
 }
 
-function chg(row,mode){
-  const box = document.getElementById("q"+row);
+function chg(row, mode){
+  const item = DATA.find(v => Number(v.row) === Number(row));
+  if (!item || !item.id) {
+    alert("商品情報を特定できません。商品一覧を再読み込みしてください。");
+    return;
+  }
+
+  const box = document.getElementById("q" + row);
   const rawQty = box ? String(box.value).trim() : "";
   const qty = Math.floor(Number(rawQty));
-  if(!rawQty || !Number.isFinite(qty) || qty <= 0) {
+  if (!rawQty || !Number.isSafeInteger(qty) || qty <= 0) {
     if (box) box.focus();
     return;
   }
 
-  const rowKey = String(row);
-  const previous = getLocalQuantity(row);
+  const productKey = String(item.id);
+  const previous = getLocalQuantity(productKey);
   const requestedDiff = mode > 0 ? qty : -qty;
   const next = Math.max(0, previous + requestedDiff);
   const actualDiff = next - previous;
 
-  // 画面と端末保存を先に完了。DB通信の待ち時間でボタンを止めない
-  LOCAL_QTY[rowKey] = next;
+  // 端末ごとの入力累計は商品IDで保存。行の並び替えに影響されない。
+  LOCAL_QTY[productKey] = next;
   scheduleLocalQuantitiesSave();
 
-  const stockEl = document.getElementById("s"+row);
+  const stockEl = document.getElementById("s" + row);
   if (stockEl) {
     stockEl.innerHTML = '<span class="stock-label">端末入力数</span> ' + next;
   }
-
   if (box) {
     box.value = "";
     keepQtyInput(row);
   }
 
-  // 実際に変化した数量だけDBへ送信。連打分は商品ごとにまとめて順次送信
-  if (actualDiff !== 0) queueStockWrite(row, actualDiff);
+  if (actualDiff !== 0) queueStockWrite(item, actualDiff);
 }
 
 // 上へ
