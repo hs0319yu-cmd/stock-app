@@ -143,6 +143,24 @@ margin:15px 0;
   outline:none;
 }
 
+/* 未送信件数：保留データがある時だけ表示 */
+#pendingCount{
+  display:none;
+  position:fixed;
+  left:10px;
+  bottom:calc(12px + env(safe-area-inset-bottom));
+  z-index:9998;
+  padding:7px 11px;
+  border-radius:999px;
+  background:#d97706;
+  color:#fff;
+  font-size:14px;
+  font-weight:800;
+  line-height:1.2;
+  box-shadow:0 2px 8px rgba(0,0,0,.22);
+  pointer-events:none;
+}
+
 #topBtn{
 position:fixed;
 right:20px;
@@ -741,6 +759,8 @@ onblur="zoomOff()">
 <div id="list"></div>
 
 
+<div id="pendingCount" role="status" aria-live="polite"></div>
+
 <button id="topBtn" onclick="goTop()">↑</button>
 
 <script>
@@ -1193,7 +1213,26 @@ function makeStockRequestId(){
     Math.random().toString(36).slice(2);
 }
 
+function updatePendingCount(){
+  const el = document.getElementById("pendingCount");
+  if (!el) return;
+
+  // DBの完了応答待ちの更新 + 送信待ちの数量を、更新単位で数える
+  const queuedCount = Array.from(stockWriteQueue.values())
+    .filter(diff => Number(diff) !== 0).length;
+  const count = pendingStockWrites.length + queuedCount;
+
+  if (count > 0) {
+    el.textContent = "未送信 " + count + "件";
+    el.style.display = "block";
+  } else {
+    el.textContent = "";
+    el.style.display = "none";
+  }
+}
+
 function saveStockWriteState(){
+  updatePendingCount();
   try {
     const queued = {};
     stockWriteQueue.forEach((diff, row) => {
@@ -1226,6 +1265,7 @@ function loadPendingStockWrites(){
     console.warn("未送信在庫データを読み込めません:", err);
     pendingStockWrites = [];
   }
+  updatePendingCount();
 }
 
 function queueStockWrite(row, diff){
