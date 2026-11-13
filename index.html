@@ -1175,15 +1175,64 @@ function searchRender(){
 // 在庫変更
 // =====================
 // 商品ごとのDB更新キュー。画面操作は通信を待たず即時反映する
+// 送信前データと送信中データをlocalStorageへ保存し、通信失敗時は同じIDで再送する
+const STOCK_PENDING_KEY = "stock_app_pending_writes_v2";
 const stockWriteQueue = new Map();
 const stockWriteRunning = new Set();
 const stockWriteTimers = new Map();
+const stockRetryTimers = new Map();
+const stockRetryCounts = new Map();
+let pendingStockWrites = [];
+
+function makeStockRequestId(){
+  if (window.crypto && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "stk-" + Date.now().toString(36) + "-" +
+    Math.random().toString(36).slice(2) + "-" +
+    Math.random().toString(36).slice(2);
+}
+
+function saveStockWriteState(){
+  try {
+    const queued = {};
+    stockWriteQueue.forEach((diff, row) => {
+      if (diff) queued[row] = diff;
+    });
+    localStorage.setItem(STOCK_PENDING_KEY, JSON.stringify({
+      queued,
+      operations: pendingStockWrites
+    }));
+    return true;
+  } catch (err) {
+    console.error("未送信在庫データの端末保存に失敗:", err);
+    alert("未送信データを端末に保存できませんでした。端末の空き容量を確認してください。保存できるまでDB送信は保留します。");
+    return false;
+  }
+}
+
+function loadPendingStockWrites(){
+  try {
+    const saved = JSON.parse(localStorage.getItem(STOCK_PENDING_KEY) || "{}");
+    pendingStockWrites = Array.isArray(saved.operations) ? saved.operations : [];
+    const queued = saved.queued && typeof saved.queued === "object" ? saved.queued : {};
+    Object.keys(queued).forEach(row => {
+      const diff = Number(queued[row]);
+      if (Number.isInteger(Number(row)) && Number.isFinite(diff) && diff !== 0) {
+        stockWriteQueue.set(String(row), diff);
+      }
+    });
+  } catch (err) {
+    console.warn("未送信在庫データを読み込めません:", err);
+    pendingStockWrites = [];
+  }
+}
 
 function queueStockWrite(row, diff){
   const key = String(row);
   stockWriteQueue.set(key, (stockWriteQueue.get(key) || 0) + diff);
+  saveStockWriteState();
 
-  // 同じ商品の連続操作を短時間まとめてからDBへ送信
   clearTimeout(stockWriteTimers.get(key));
   if (!stockWriteRunning.has(key)) {
     const timer = setTimeout(() => {
@@ -1194,35 +1243,93 @@ function queueStockWrite(row, diff){
   }
 }
 
+function moveQueuedDiffToPending(row){
+  const key = String(row);
+  const diff = Number(stockWriteQueue.get(key) || 0);
+  if (!diff) return true;
+
+  stockWriteQueue.delete(key);
+  pendingStockWrites.push({
+    id: makeStockRequestId(),
+    row: Number(row),
+    diff,
+    createdAt: new Date().toISOString()
+  });
+  return saveStockWriteState();
+}
+
+function scheduleStockRetry(row){
+  const key = String(row);
+  if (stockRetryTimers.has(key)) return;
+
+  const attempts = (stockRetryCounts.get(key) || 0) + 1;
+  stockRetryCounts.set(key, attempts);
+
+  if (attempts > 5) {
+    if (!window.__stockRetryAlerted) {
+      window.__stockRetryAlerted = true;
+      alert("在庫更新の通信が復旧していません。入力データは端末に保存されています。通信回復後にアプリを開き直すと、同じ更新IDで再送します。");
+    }
+    return;
+  }
+
+  const delay = Math.min(5000 * Math.pow(2, attempts - 1), 60000);
+  const timer = setTimeout(() => {
+    stockRetryTimers.delete(key);
+    flushStockWriteQueue(Number(row));
+  }, delay);
+  stockRetryTimers.set(key, timer);
+}
+
 async function flushStockWriteQueue(row){
   const key = String(row);
   if (stockWriteRunning.has(key)) return;
+
+  clearTimeout(stockWriteTimers.get(key));
+  stockWriteTimers.delete(key);
+  if (!moveQueuedDiffToPending(row)) return;
+
   stockWriteRunning.add(key);
-
   try {
-    while (stockWriteQueue.get(key)) {
-      const diff = stockWriteQueue.get(key);
-      stockWriteQueue.set(key, 0);
+    while (true) {
+      const index = pendingStockWrites.findIndex(op => Number(op.row) === Number(row));
+      if (index < 0) break;
 
+      const operation = pendingStockWrites[index];
       const response = await fetch(GAS_URL, {
         method:"POST",
-        body:JSON.stringify({ row:Number(row), diff:diff })
+        body:JSON.stringify({
+          row:Number(operation.row),
+          diff:Number(operation.diff),
+          requestId:operation.id
+        })
       });
       const result = await response.json();
 
       if (!response.ok || !result || result.ok !== true ||
-          Number(result.row) !== Number(row) ||
+          Number(result.row) !== Number(operation.row) ||
+          result.requestId !== operation.id ||
           !Number.isFinite(Number(result.stock))) {
         throw new Error((result && result.error) || "DBから保存完了の応答がありません");
       }
+
+      // 成功応答を確認できた更新だけ端末キューから削除
+      pendingStockWrites = pendingStockWrites.filter(op => op.id !== operation.id);
+      stockRetryCounts.delete(key);
+      clearTimeout(stockRetryTimers.get(key));
+      stockRetryTimers.delete(key);
+      window.__stockRetryAlerted = false;
+      saveStockWriteState();
     }
   } catch (err) {
-    console.error("DB在庫更新エラー:", err);
-    // 通信結果が不明な場合は自動再送しない（二重加算防止）
-    stockWriteQueue.set(key, 0);
-    alert("DBへの保存結果を確認できませんでした。通信状態とスプレッドシートの在庫を確認してください。");
+    // 応答が不明でも操作IDを変えず、同じ更新を再送する
+    console.warn("DB在庫更新を再試行します:", err);
+    saveStockWriteState();
+    scheduleStockRetry(row);
   } finally {
     stockWriteRunning.delete(key);
+
+    // 送信中に追加された数量があれば続けて送信
     if (stockWriteQueue.get(key)) {
       clearTimeout(stockWriteTimers.get(key));
       stockWriteTimers.delete(key);
@@ -1230,6 +1337,26 @@ async function flushStockWriteQueue(row){
     }
   }
 }
+
+function retryPendingStockWrites(){
+  const rows = new Set();
+  pendingStockWrites.forEach(op => rows.add(Number(op.row)));
+  stockWriteQueue.forEach((diff, row) => {
+    if (diff) rows.add(Number(row));
+  });
+  rows.forEach(row => flushStockWriteQueue(row));
+}
+
+function persistQueuedWritesBeforeExit(){
+  for (const [row, timer] of stockWriteTimers.entries()) {
+    clearTimeout(timer);
+    moveQueuedDiffToPending(Number(row));
+  }
+  saveStockWriteState();
+}
+
+window.addEventListener("pagehide", persistQueuedWritesBeforeExit);
+window.addEventListener("online", retryPendingStockWrites);
 
 function chg(row,mode){
   const box = document.getElementById("q"+row);
@@ -1461,6 +1588,8 @@ async function scanQR() {
 
 // 起動
 loadLocalQuantities();
+loadPendingStockWrites();
+setTimeout(retryPendingStockWrites, 300);
 load();
 
 
