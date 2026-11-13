@@ -25,7 +25,7 @@
 // service-worker.js の更新を確実に確認する
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {
-    navigator.serviceWorker.register("./service-worker.js?v=stock-v2", {
+    navigator.serviceWorker.register("./service-worker.js?v=stock-v3", {
       updateViaCache: "none"
     }).then(function (registration) {
       return registration.update();
@@ -1198,6 +1198,7 @@ function searchRender(){
 // 送信前データと送信中データをlocalStorageへ保存し、通信失敗時は同じIDで再送する
 const STOCK_PENDING_KEY = "stock_app_pending_writes_v2";
 const stockWriteQueue = new Map();
+const stockWriteQueueCreatedAt = new Map();
 const stockWriteRunning = new Set();
 const stockWriteTimers = new Map();
 const stockRetryTimers = new Map();
@@ -1236,7 +1237,12 @@ function saveStockWriteState(){
   try {
     const queued = {};
     stockWriteQueue.forEach((diff, row) => {
-      if (diff) queued[row] = diff;
+      if (diff) queued[row] = {
+        diff,
+        createdAt: stockWriteQueueCreatedAt.has(String(row))
+          ? stockWriteQueueCreatedAt.get(String(row))
+          : ""
+      };
     });
     localStorage.setItem(STOCK_PENDING_KEY, JSON.stringify({
       queued,
@@ -1256,9 +1262,17 @@ function loadPendingStockWrites(){
     pendingStockWrites = Array.isArray(saved.operations) ? saved.operations : [];
     const queued = saved.queued && typeof saved.queued === "object" ? saved.queued : {};
     Object.keys(queued).forEach(row => {
-      const diff = Number(queued[row]);
+      const savedItem = queued[row];
+      const isStructured = savedItem && typeof savedItem === "object";
+      const diff = Number(isStructured ? savedItem.diff : savedItem);
       if (Number.isInteger(Number(row)) && Number.isFinite(diff) && diff !== 0) {
-        stockWriteQueue.set(String(row), diff);
+        const key = String(row);
+        stockWriteQueue.set(key, diff);
+        // 旧形式（数量だけ保存）は作成日時が不明。安全のため自動反映させない。
+        const createdAt = isStructured && savedItem.createdAt
+          ? String(savedItem.createdAt)
+          : "";
+        stockWriteQueueCreatedAt.set(key, createdAt);
       }
     });
   } catch (err) {
@@ -1270,7 +1284,16 @@ function loadPendingStockWrites(){
 
 function queueStockWrite(row, diff){
   const key = String(row);
-  stockWriteQueue.set(key, (stockWriteQueue.get(key) || 0) + diff);
+  if (!stockWriteQueueCreatedAt.has(key)) {
+    stockWriteQueueCreatedAt.set(key, new Date().toISOString());
+  }
+  const nextDiff = (stockWriteQueue.get(key) || 0) + diff;
+  if (nextDiff === 0) {
+    stockWriteQueue.delete(key);
+    stockWriteQueueCreatedAt.delete(key);
+  } else {
+    stockWriteQueue.set(key, nextDiff);
+  }
   saveStockWriteState();
 
   clearTimeout(stockWriteTimers.get(key));
@@ -1289,11 +1312,15 @@ function moveQueuedDiffToPending(row){
   if (!diff) return true;
 
   stockWriteQueue.delete(key);
+  const createdAt = stockWriteQueueCreatedAt.has(key)
+    ? stockWriteQueueCreatedAt.get(key)
+    : "";
+  stockWriteQueueCreatedAt.delete(key);
   pendingStockWrites.push({
     id: makeStockRequestId(),
     row: Number(row),
     diff,
-    createdAt: new Date().toISOString()
+    createdAt
   });
   return saveStockWriteState();
 }
@@ -1336,15 +1363,38 @@ async function flushStockWriteQueue(row){
       if (index < 0) break;
 
       const operation = pendingStockWrites[index];
+      const operationCreatedAt = new Date(operation.createdAt).getTime();
+      if (operation.expired || !Number.isFinite(operationCreatedAt) ||
+          Date.now() - operationCreatedAt >= 60 * 24 * 60 * 60 * 1000) {
+        operation.expired = true;
+        saveStockWriteState();
+        if (!window.__stockExpiredAlerted) {
+          window.__stockExpiredAlerted = true;
+          alert("60日以上前の未送信データが残っています。安全のため自動反映を停止しました。データは端末に残しています。現物とDBの在庫を確認して管理者に連絡してください。");
+        }
+        break;
+      }
       const response = await fetch(GAS_URL, {
         method:"POST",
         body:JSON.stringify({
           row:Number(operation.row),
           diff:Number(operation.diff),
-          requestId:operation.id
+          requestId:operation.id,
+          createdAt:operation.createdAt
         })
       });
       const result = await response.json();
+
+      // サーバー側で期限切れ・日時不明と判定された場合も、端末データを残して停止
+      if (result && (result.code === "EXPIRED_REQUEST" || result.code === "MISSING_CREATED_AT")) {
+        operation.expired = true;
+        saveStockWriteState();
+        if (!window.__stockExpiredAlerted) {
+          window.__stockExpiredAlerted = true;
+          alert("古い未送信データ、または更新日時を確認できないデータが残っています。安全のため自動反映を停止しました。データは端末に残しています。現物とDBの在庫を確認して管理者に連絡してください。");
+        }
+        break;
+      }
 
       if (!response.ok || !result || result.ok !== true ||
           Number(result.row) !== Number(operation.row) ||
