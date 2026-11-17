@@ -52,6 +52,20 @@ font-family:sans-serif;
 background:#f5f5f5;
 }
 
+/* 通信できない時だけ表示する未送信通知 */
+#stockNetworkNotice{
+  display:none;
+  margin:0 0 8px;
+  padding:10px 14px;
+  border-radius:8px;
+  background:#fff0d9;
+  color:#8a4300;
+  border:1px solid #f0bd76;
+  font-size:15px;
+  font-weight:800;
+}
+
+
 html{
   scroll-padding-top: var(--header-h);
 }
@@ -662,6 +676,7 @@ html.is-desktop #topBtn{width:58px;height:58px;right:18px;bottom:18px;font-size:
 <body>
 
 <div class="topbar">
+<div id="stockNetworkNotice" role="status" aria-live="polite"></div>
 
  
 
@@ -1193,6 +1208,31 @@ function makeStockRequestId(){
     Math.random().toString(36).slice(2);
 }
 
+// 通信エラー時だけ未送信通知を表示する
+let stockNetworkUnavailable = false;
+
+function updateStockNetworkNotice(){
+  const notice = document.getElementById("stockNetworkNotice");
+  if (!notice) return;
+
+  const queuedCount = Array.from(stockWriteQueue.values())
+    .filter(diff => Number(diff) !== 0).length;
+  const pendingCount = pendingStockWrites.length;
+  const total = queuedCount + pendingCount;
+  const unavailable = !navigator.onLine || stockNetworkUnavailable;
+
+  if (total > 0 && unavailable) {
+    notice.textContent = "⚠ 通信できません。未送信 " + total +
+      "件を端末に保存中です。通信回復後に自動送信します。";
+    notice.style.display = "block";
+  } else {
+    notice.textContent = "";
+    notice.style.display = "none";
+  }
+}
+
+window.addEventListener("offline", updateStockNetworkNotice);
+
 function saveStockWriteState(){
   try {
     const queued = {};
@@ -1203,6 +1243,7 @@ function saveStockWriteState(){
       queued,
       operations: pendingStockWrites
     }));
+    updateStockNetworkNotice();
     return true;
   } catch (err) {
     console.error("未送信在庫データの端末保存に失敗:", err);
@@ -1320,12 +1361,18 @@ async function flushStockWriteQueue(row){
       clearTimeout(stockRetryTimers.get(key));
       stockRetryTimers.delete(key);
       window.__stockRetryAlerted = false;
+      if (pendingStockWrites.length === 0 && stockWriteQueue.size === 0) {
+        stockNetworkUnavailable = false;
+      }
       saveStockWriteState();
+      updateStockNetworkNotice();
     }
   } catch (err) {
     // 応答が不明でも操作IDを変えず、同じ更新を再送する
     console.warn("DB在庫更新を再試行します:", err);
+    stockNetworkUnavailable = true;
     saveStockWriteState();
+    updateStockNetworkNotice();
     scheduleStockRetry(row);
   } finally {
     stockWriteRunning.delete(key);
@@ -1357,7 +1404,10 @@ function persistQueuedWritesBeforeExit(){
 }
 
 window.addEventListener("pagehide", persistQueuedWritesBeforeExit);
-window.addEventListener("online", retryPendingStockWrites);
+window.addEventListener("online", () => {
+  retryPendingStockWrites();
+  updateStockNetworkNotice();
+});
 
 function chg(row,mode){
   const box = document.getElementById("q"+row);
@@ -1590,6 +1640,7 @@ async function scanQR() {
 // 起動
 loadLocalQuantities();
 loadPendingStockWrites();
+updateStockNetworkNotice();
 setTimeout(retryPendingStockWrites, 300);
 load();
 
